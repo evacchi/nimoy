@@ -26,8 +26,6 @@ let Die =
     )
   )
 
-
-
 proc actorOf(self: var ActorSystem, initial: Behavior): Address =
   var address = Address(
     mailbox: initQueue[Message](),
@@ -42,22 +40,26 @@ proc `!`(self: var Address, m: Message) =
 proc run(self: var ActorSystem): void =
   while true:
     for i in 0..self.addresses.len-1:
-      var actorRef = self.addresses[0]
+      var actorRef = self.addresses[i]
       if (actorRef.mailbox.len != 0):
         let eff = actorRef.receive.behavior(actorRef.mailbox.pop())
         actorRef.receive = eff.effect(actorRef.receive)
 
 var
- system = ActorSystem(addresses: @[])
- actor = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
-    echo "ciao ", m
+  system = ActorSystem(addresses: @[])
+  actor1 = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
+    echo "actor1: ", m
     Stay
   ))
+  actor2 = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
+     echo "actor2: ", m
+     Stay
+   ))
 
 
-actor ! 1
-actor ! 2
-actor ! 3
-actor ! 4
+actor1 ! 1
+actor2 ! 2
+actor2 ! 3
+actor1 ! 4
 
 system.run()
