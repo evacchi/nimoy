@@ -1,7 +1,9 @@
-import future, queues
+import future, queues, threadpool
 
 type
-  Message  = int
+  Message  = ref object
+    value: int
+    sender: Address
   Effect   = object
     effect: Behavior -> Behavior
   Behavior = object
@@ -9,7 +11,7 @@ type
   Address  = ref object
     mailbox: Queue[Message]
     receive: Behavior
-  ActorSystem = object
+  ActorSystem = ref object
     addresses: seq[Address]
 
 
@@ -21,13 +23,14 @@ proc Become(newB: Behavior): Effect =
 let Die =
   Become(Behavior(behavior:
     proc(m: Message): Effect =
-      echo "discarding message ", m
+      echo "discarding message "
       Stay
     )
   )
 
 proc actorOf(self: var ActorSystem, initial: Behavior): Address =
-  var address = Address(
+  var address: Address
+  address = Address(
     mailbox: initQueue[Message](),
     receive: initial
   )
@@ -36,30 +39,49 @@ proc actorOf(self: var ActorSystem, initial: Behavior): Address =
 
 proc `!`(self: var Address, m: Message) =
   self.mailbox.add(m)
+  # echo "received: ", self.mailbox
 
-proc run(self: var ActorSystem): void =
+proc processActor(self: Address) =
+  if (self.mailbox.len != 0):
+    let msg = self.mailbox.pop()
+    let eff = self.receive.behavior(msg)
+    self.receive = eff.effect(self.receive)
+
+var workQueue = initQueue[Address]()
+
+proc run(self: ActorSystem): void =
   while true:
+    # while workQueue.len != 0:
+    #    workQueue.pop().processActor()
     for i in 0..self.addresses.len-1:
       var actorRef = self.addresses[i]
       if (actorRef.mailbox.len != 0):
-        let eff = actorRef.receive.behavior(actorRef.mailbox.pop())
-        actorRef.receive = eff.effect(actorRef.receive)
+        # workQueue.add(actorRef)
+        processActor(actorRef)
+
+
 
 var
   system = ActorSystem(addresses: @[])
-  actor1 = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
-    echo "actor1: ", m
-    Stay
-  ))
-  actor2 = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
-     echo "actor2: ", m
-     Stay
-   ))
+  actor1: Address
+  actor2: Address
+
+actor1 = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
+  echo "actor1: ", m.value
+  actor2 ! Message(value: m.value + 1, sender: actor1)
+  Stay
+))
+actor2 = system.actorOf(Behavior(behavior:proc(m:Message): Effect =
+ echo "actor2: ", m.value
+ actor1 ! Message(value: m.value + 1, sender: actor2)
+ Stay
+))
 
 
-actor1 ! 1
-actor2 ! 2
-actor2 ! 3
-actor1 ! 4
+actor1 ! Message(value: 1, sender: actor2)
 
 system.run()
+
+
+while true:
+  discard
