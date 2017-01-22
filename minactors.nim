@@ -1,12 +1,6 @@
-import future, queues, threadpool
-
-{.experimental.}
+import future, queues, threadpool, lockqueues, options, os
 
 type
-  Flaffo = ref object
-    mailbox: ref seq[int]
-
-
   Message  = ref object
     value: int
     sender: Address
@@ -15,9 +9,9 @@ type
   Behavior = object
     behavior: Message -> Effect
   AddressObj = object
-    mailbox: ref Queue[Message]
+    mailbox: LockQueue[Message]
     receive: Behavior
-  Address  = ref AddressObj
+  Address  = ptr AddressObj
   ActorSystem = ref object
     addresses: seq[Address]
 
@@ -46,9 +40,8 @@ let Die =
   )
 
 proc actorOf(self: var ActorSystem, initial: Address -> Behavior): Address =
-  var address: Address = new AddressObj
-  address.mailbox = new Queue[Message]
-  address.mailbox[] = initQueue[Message]()
+  var address: Address = cast[Address](alloc0(sizeof(AddressObj)))
+  address.mailbox = initLockQueue[Message]()
   address.receive = initial(address)
   self.addresses.add(address)
   address
@@ -60,29 +53,30 @@ proc makeActor(self: var ActorSystem, initial: (Address, Message) -> Effect): Ad
         initial(address, message)
   )
 
-proc `!`(self: var Address, m: Message) =
+proc `!`(self: Address, m: Message) =
   self.mailbox.add(m)
   # echo "received: ", self.mailbox
 
 proc processActor(self: Address) =
-  if (self.mailbox[].len != 0):
-    let msg = self.mailbox[].pop()
+  let maybeMsg = self.mailbox.pop() 
+  if (maybeMsg.isSome()):
+    let msg = maybeMsg.get()
     let eff = self.receive.behavior(msg)
     let beh = eff.effect(self.receive)
     self.receive = beh
 
 var workQueue = initQueue[Address]()
 
-proc run(self: ActorSystem): void =
-  while true:
-    while workQueue.len != 0:
-      let aref = workQueue.pop()
-      processActor(aref)
-    for i in 0..self.addresses.len-1:
-      var actorRef = self.addresses[i]
-      if (actorRef.mailbox[].len != 0):
-        workQueue.add(actorRef)
-        # processActor(actorRef)
+# proc run(self: ActorSystem): void =
+#   while true:
+#     while workQueue.len != 0:
+#       let aref = workQueue.pop()
+#       processActor(aref)
+#     for i in 0..self.addresses.len-1:
+#       var actorRef = self.addresses[i]
+#       if (actorRef.mailbox.len != 0):
+#         workQueue.add(actorRef)
+#         # processActor(actorRef)
 
 
 var
@@ -102,20 +96,29 @@ var
     m.sender ! Message(value: m.value + 1, sender: self)
     Stay
 
+var t1,t2: Thread[void]
+createThread(t1, proc() =
+  while true:
+    sleep 1
+    processActor(actor1)
+)
+createThread(t2, proc() =
+  while true:
+    sleep 1
+    processActor(actor2)
+)
+
+
 
 proc mainLoop() =
-  # var thread: Thread[ActorSystem]
-  # createThread(thread, run, system)
-  system.run
   while true:
     discard
 
 
 
-
+echo 1
 # system.run()
-actor1 ! Message(value: 1, sender: actor1)
-actor2 ! Message(value: 3, sender: actor2)
+actor1 ! Message(value: 1, sender: actor2)
 
 mainLoop()
 
