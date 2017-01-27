@@ -1,4 +1,4 @@
-import future, queues, threadpool, lockqueues, options, os
+import future, queues, threadpool, minactorspkg/lockqueues, options, os
 
 type
   Message  = ref object
@@ -67,16 +67,16 @@ proc processActor(self: Address) =
 
 var workQueue = initQueue[Address]()
 
-# proc run(self: ActorSystem): void =
-#   while true:
-#     while workQueue.len != 0:
-#       let aref = workQueue.pop()
-#       processActor(aref)
-#     for i in 0..self.addresses.len-1:
-#       var actorRef = self.addresses[i]
-#       if (actorRef.mailbox.len != 0):
-#         workQueue.add(actorRef)
-#         # processActor(actorRef)
+proc run(self: ActorSystem): void =
+  while true:
+    while workQueue.len != 0:
+      let aref = workQueue.pop()
+      processActor(aref)
+    for i in 0..self.addresses.len-1:
+      var actorRef = self.addresses[i]
+      if (actorRef.mailbox.len != 0):
+        workQueue.add(actorRef)
+        # processActor(actorRef)
 
 
 var
