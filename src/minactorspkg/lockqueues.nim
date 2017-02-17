@@ -2,21 +2,18 @@ import queues, locks, options
 
 type 
   LockQueue*[T] = object
-    queue: ref Queue[T]
-    lock: ref Lock
-
-
-
+    queue: ptr Queue[T]
+    lock: ptr Lock
 
 proc len*[T](q: LockQueue[T]): int =
   q.queue[].len
 
 
 proc initLockQueue*[T](initialSize: int = 4, maxSize: int = 1000): LockQueue[T] =
-  var lock = new Lock
+  var lock = cast[ptr Lock](alloc0(sizeof(Lock)))
   initLock(lock[]) 
   var q = LockQueue[T](
-    queue: new Queue[T],#cast[ptr Queue[T]](alloc0(sizeof(Queue[T]))),
+    queue: cast[ptr Queue[T]](alloc0(sizeof(Queue[T]))),
     lock: lock
   )
   q.queue[] = initQueue[T](initialSize)
@@ -37,7 +34,8 @@ proc pop*[T](q: var LockQueue[T]): Option[T] =
   release(q.lock[]) 
 
 proc destroy*[T](q: LockQueue[T]) =
-  dealloc(q)
+  dealloc(q.queue[])
+  dealloc(q.lock[])
 
 # var 
 #   t1: Thread[void]

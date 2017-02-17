@@ -20,6 +20,7 @@ type
 
   Behavior = object
     behavior: (var ActorContext, Envelope) -> Effect
+    
 proc Become(newB: Behavior): Effect =
   Effect( effect: proc (old: Behavior): Behavior = newB )
 

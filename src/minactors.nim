@@ -1,4 +1,4 @@
-import future, queues, threadpool, minactorspkg/lockqueues, options, os
+import future, queues, threadpool, minactorspkg/lockqueues, options, os, sharedtables
 
 type
   Message  = ref object
@@ -53,8 +53,11 @@ proc makeActor(self: var ActorSystem, initial: (Address, Message) -> Effect): Ad
         initial(address, message)
   )
 
-proc `!`(self: Address, m: Message) =
+proc send(self: Address, m: Message) =
   self.mailbox.add(m)
+
+proc `!`(self: Address, m: Message) =
+  send(self, m)
   # echo "received: ", self.mailbox
 
 proc processActor(self: Address) =

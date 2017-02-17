@@ -20,10 +20,13 @@ type
     sender: ActorRef
     receiver: ActorRef
 
+  ActorBehavior = proc(context: var ActorContext, envelope: Envelope)
+  ActorInit     = proc(context: var ActorContext)
+
   Actor = object
     path: ActorId
     mailbox: Deque[Envelope]
-    behavior: proc(context: var ActorContext, envelope: Envelope)
+    behavior: ActorBehavior
 
 
 proc send(context: var ActorContext, message: Message, receiver: ActorRef) =
@@ -31,9 +34,7 @@ proc send(context: var ActorContext, message: Message, receiver: ActorRef) =
     context.outbox.addLast(e)
 
 
-
-
-proc processContext(currentContext: var ActorContext, system: var ActorSystem) =
+proc processContext(system: var ActorSystem, currentContext: var ActorContext) =
   system.table.withValue(currentContext.self.path, actor):
     if actor.mailbox.len > 0:
       let e = actor.mailbox.popFirst()
@@ -43,29 +44,23 @@ proc processContext(currentContext: var ActorContext, system: var ActorSystem) =
     system.table.withValue(e.receiver.path, actor):
       actor.mailbox.addLast(e)
 
-proc createActor(
-  system: var ActorSystem, 
-  path: ActorId, 
-  init: proc(context: var ActorContext),
-  behavior: proc(context: var ActorContext, envelope: Envelope)): ActorRef =
+proc createActor(system: var ActorSystem, path: ActorId, 
+                 init: ActorInit, behavior: ActorBehavior): ActorRef =
   var actor = Actor(mailbox: initDeque[Envelope](), behavior: behavior)
   system.table[path] = actor
   var actorRef = ActorRef(path: path)
   var currentContext = ActorContext(self: actorRef, outbox: initDeque[Envelope]()) 
   init(currentContext)
-  processContext(currentContext, system)
+  system.processContext(currentContext)
   actorRef
-
 
 proc process(system: var ActorSystem, path: ActorId) =
   let currentRef = ActorRef(path: path)
   var currentContext = ActorContext(self: currentRef, outbox: initDeque[Envelope]()) 
-  processContext(currentContext, system)
-
+  system.processContext(currentContext)
 
 proc createActorSystem(): ActorSystem =
   ActorSystem(table: initSharedTable[ActorId, Actor]())
-
 
 var system = createActorSystem()
 let fooRef = system.createActor(100) do (context: var ActorContext):
@@ -74,7 +69,7 @@ do (context: var ActorContext, e: Envelope):
   writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
   context.send(Message(e.message + 1), e.sender)
 
-let barRef = system.createActor(200)  do (context: var ActorContext):
+let barRef = system.createActor(200) do (context: var ActorContext):
   writeLine(stdout, "startup 200")
   context.send(Message(1), fooRef)
 do (context: var  ActorContext, e: Envelope):
