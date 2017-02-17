@@ -21,7 +21,7 @@ type
     receiver: ActorRef
 
   ActorBehavior = proc(context: var ActorContext, envelope: Envelope)
-  ActorInit     = proc(context: var ActorContext)
+  ActorInit     = proc(context: var ActorContext): ActorBehavior
 
   Actor = object
     path: ActorId
@@ -45,12 +45,12 @@ proc processContext(system: var ActorSystem, currentContext: var ActorContext) =
       actor.mailbox.addLast(e)
 
 proc createActor(system: var ActorSystem, path: ActorId, 
-                 init: ActorInit, behavior: ActorBehavior): ActorRef =
-  var actor = Actor(mailbox: initDeque[Envelope](), behavior: behavior)
-  system.table[path] = actor
+                 init: ActorInit): ActorRef =
+  var actor = Actor(mailbox: initDeque[Envelope]())
   var actorRef = ActorRef(path: path)
   var currentContext = ActorContext(self: actorRef, outbox: initDeque[Envelope]()) 
-  init(currentContext)
+  actor.behavior = init(currentContext)
+  system.table[path] = actor
   system.processContext(currentContext)
   actorRef
 
@@ -63,19 +63,20 @@ proc createActorSystem(): ActorSystem =
   ActorSystem(table: initSharedTable[ActorId, Actor]())
 
 var system = createActorSystem()
-let fooRef = system.createActor(100) do (context: var ActorContext):
+let fooRef = system.createActor(100, proc (context: var ActorContext): ActorBehavior =
   writeLine(stdout, "startup 100")
-do (context: var ActorContext, e: Envelope):
-  writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
-  context.send(Message(e.message + 1), e.sender)
+  return proc (context: var ActorContext, e: Envelope) =
+      writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
+      context.send(Message(e.message + 1), e.sender)
+  )
 
-let barRef = system.createActor(200) do (context: var ActorContext):
+let barRef = system.createActor(200, proc (context: var ActorContext): ActorBehavior =
   writeLine(stdout, "startup 200")
   context.send(Message(1), fooRef)
-do (context: var  ActorContext, e: Envelope):
-  writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
-  context.send(Message(e.message + 1), e.sender)
-
+  return proc (context: var ActorContext, e: Envelope) =
+    writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
+    context.send(Message(e.message + 1), e.sender)
+  )
 
 
 #system.table.withValue(100, actor):
