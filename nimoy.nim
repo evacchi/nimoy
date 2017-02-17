@@ -5,55 +5,98 @@ type
   
   ActorRef = object
     path: ActorId 
+
+  ActorSystem = object 
+    table: SharedTable[ActorId, Actor]
+
+  ActorContext = object
+    self: ActorRef
+    outbox: Deque[Envelope]
   
   Message = int
   
   Envelope = object
     message: Message
     sender: ActorRef
+    receiver: ActorRef
 
   Actor = object
     path: ActorId
     mailbox: Deque[Envelope]
+    behavior: proc(context: var ActorContext, envelope: Envelope)
 
 
-proc send(table: var SharedTable[ActorId, Actor], fromRef: ActorRef, toRef: ActorRef, message: Message) =
-  table.withValue(toRef.path, actor):
-    let e = Envelope(message: message, sender: fromRef)
-    actor.mailbox.addLast(e)
+proc send(context: var ActorContext, message: Message, receiver: ActorRef) =
+    let e = Envelope(message: message, sender: context.self, receiver: receiver)
+    context.outbox.addLast(e)
 
-proc createActor(table: var SharedTable[ActorId, Actor], path: ActorId): ActorRef =
-  var actor = Actor(mailbox: initDeque[Envelope]())
-  table[path] = actor
-  ActorRef(path: path)
 
-proc process(table: var SharedTable[ActorId, Actor], path: ActorId) =
-  table.withValue(path, actor):
-    while actor.mailbox.len > 0:
+
+
+proc processContext(currentContext: var ActorContext, system: var ActorSystem) =
+  system.table.withValue(currentContext.self.path, actor):
+    if actor.mailbox.len > 0:
       let e = actor.mailbox.popFirst()
-      writeLine(stdout, path, " has received ", e.message, " from ", e.sender)
+      actor.behavior(currentContext, e) 
+
+  for e in currentContext.outbox:
+    system.table.withValue(e.receiver.path, actor):
+      actor.mailbox.addLast(e)
+
+proc createActor(
+  system: var ActorSystem, 
+  path: ActorId, 
+  init: proc(context: var ActorContext),
+  behavior: proc(context: var ActorContext, envelope: Envelope)): ActorRef =
+  var actor = Actor(mailbox: initDeque[Envelope](), behavior: behavior)
+  system.table[path] = actor
+  var actorRef = ActorRef(path: path)
+  var currentContext = ActorContext(self: actorRef, outbox: initDeque[Envelope]()) 
+  init(currentContext)
+  processContext(currentContext, system)
+  actorRef
 
 
-var system = initSharedTable[ActorId, Actor]()
-let fooRef = system.createActor(100)
-let barRef = system.createActor(200)
+proc process(system: var ActorSystem, path: ActorId) =
+  let currentRef = ActorRef(path: path)
+  var currentContext = ActorContext(self: currentRef, outbox: initDeque[Envelope]()) 
+  processContext(currentContext, system)
 
 
+proc createActorSystem(): ActorSystem =
+  ActorSystem(table: initSharedTable[ActorId, Actor]())
+
+
+var system = createActorSystem()
+let fooRef = system.createActor(100) do (context: var ActorContext):
+  writeLine(stdout, "startup 100")
+do (context: var ActorContext, e: Envelope):
+  writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
+  context.send(Message(e.message + 1), e.sender)
+
+let barRef = system.createActor(200)  do (context: var ActorContext):
+  writeLine(stdout, "startup 200")
+  context.send(Message(1), fooRef)
+do (context: var  ActorContext, e: Envelope):
+  writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
+  context.send(Message(e.message + 1), e.sender)
+
+
+
+#system.table.withValue(100, actor):
+#  actor.mailbox.addLast(Envelope(message: Message(1), sender: barRef, receiver: fooRef))
 
 var t1,t2: Thread[void]
 
-system.send(fooRef, barRef, Message(1))
-system.send(barRef, fooRef, Message(2))
+
 
 createThread(t1, proc() {.thread.} = 
   while true:
     system.process(fooRef.path)
-    system.send(fooRef, barRef, Message(3))
 )
 createThread(t2, proc() {.thread.} = 
   while true:
     system.process(barRef.path)
-    system.send(barRef, fooRef, Message(4))
 )
 
 
