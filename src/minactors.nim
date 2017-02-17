@@ -79,6 +79,12 @@ proc run(self: ActorSystem): void =
         # processActor(actorRef)
 
 
+
+proc mainLoop(self: Address) =
+  while true:
+    sleep 1
+    processActor(self)
+
 var
   system = ActorSystem(addresses: @[])
   actor1 = system.makeActor do (self: Address, m: Message) -> Effect:
@@ -97,22 +103,10 @@ var
     Stay
 
 var t1,t2: Thread[void]
-createThread(t1, proc() =
-  while true:
-    sleep 1
-    processActor(actor1)
-)
-createThread(t2, proc() =
-  while true:
-    sleep 1
-    processActor(actor2)
-)
+createThread(t1, proc() = actor1.mainLoop())
+createThread(t2, proc() = actor2.mainLoop())
 
 
-
-proc mainLoop() =
-  while true:
-    discard
 
 
 
@@ -120,5 +114,4 @@ echo 1
 # system.run()
 actor1 ! Message(value: 1, sender: actor2)
 
-mainLoop()
-
+joinThreads(t1,t2)

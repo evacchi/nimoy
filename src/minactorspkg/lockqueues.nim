@@ -12,7 +12,7 @@ proc len*[T](q: LockQueue[T]): int =
   q.queue[].len
 
 
-proc initLockQueue*[T](initialSize: int = 4): LockQueue[T] =
+proc initLockQueue*[T](initialSize: int = 4, maxSize: int = 1000): LockQueue[T] =
   var lock = new Lock
   initLock(lock[]) 
   var q = LockQueue[T](
