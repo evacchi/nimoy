@@ -34,6 +34,9 @@ proc send(context: var ActorContext, message: Message, receiver: ActorRef) =
     let e = Envelope(message: message, sender: context.self, receiver: receiver)
     context.outbox.addLast(e)
 
+proc nop(context: var ActorContext, envelope: Envelope) =
+  writeLine(stdout, context.self, ": Unhandled message ", envelope)
+
 proc become(context: var ActorContext, newBehavior: ActorBehavior) =
     context.behavior = newBehavior
 
@@ -51,12 +54,14 @@ proc processContext(system: var ActorSystem, currentContext: var ActorContext) =
       actor.mailbox.addLast(e)
 
   
+proc createActorContext(actorRef: ActorRef): ActorContext =
+  ActorContext(self: actorRef, outbox: initDeque[Envelope](), behavior: nop) 
 
 proc createActor(system: var ActorSystem, id: ActorId, 
                  init: ActorInit): ActorRef =
   var actor = Actor(mailbox: initDeque[Envelope]())
   var actorRef = ActorRef(id: id)
-  var currentContext = ActorContext(self: actorRef, outbox: initDeque[Envelope]()) 
+  var currentContext = createActorContext(actorRef)
   init(currentContext)
   actor.behavior = currentContext.behavior
   system.table[id] = actor
@@ -64,8 +69,8 @@ proc createActor(system: var ActorSystem, id: ActorId,
   actorRef
 
 proc process(system: var ActorSystem, id: ActorId) =
-  let currentRef = ActorRef(id: id)
-  var currentContext = ActorContext(self: currentRef, outbox: initDeque[Envelope]()) 
+  let actorRef = ActorRef(id: id)
+  var currentContext = createActorContext(actorRef)
   system.processContext(currentContext)
 
 proc createActorSystem(): ActorSystem =
@@ -74,28 +79,35 @@ proc createActorSystem(): ActorSystem =
 var system = createActorSystem()
 let fooRef = system.createActor(100) do (context: var ActorContext):
   writeLine(stdout, "startup 100")
-  context.become do (context: var ActorContext, e: Envelope):
+
+  proc receive(context: var ActorContext, e: Envelope) =
     writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
     context.send(Message(e.message + 1), e.sender)
+
+  context.become(receive)
+
+
 
 let barRef = system.createActor(200) do (context: var ActorContext):
   writeLine(stdout, "startup 200")
   context.send(Message(1), fooRef)
 
+  # state
   var i = 1000
-  context.become do (context: var ActorContext, e: Envelope):
+
+  proc receive2(context: var ActorContext, e: Envelope) =
+    writeLine(stdout, "DONE.")
+
+  proc receive(context: var ActorContext, e: Envelope) =
     writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
     context.send(Message(e.message + 1), e.sender)
     i = i - 1
     if (i <= 100):
-      context.become do (context: var ActorContext, e: Envelope):
-        writeLine(stdout, "DONE.")
+      context.become(receive2)
         
   
+  context.become(receive)
 
-
-#system.table.withValue(100, actor):
-#  actor.mailbox.addLast(Envelope(message: Message(1), sender: barRef, receiver: fooRef))
 
 var t1,t2: Thread[void]
 
