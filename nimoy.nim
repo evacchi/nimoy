@@ -1,4 +1,4 @@
-import sharedtables, deques
+import sharedtables, sharedlist, deques
 
 type
   ActorId = int
@@ -33,6 +33,7 @@ type
 
   ActorSystem = object
     table: SharedTable[ActorId, Actor]
+    ids: SharedList[ActorId]
 
 
 
@@ -71,13 +72,14 @@ proc process(system: var ActorSystem, actorRef: ActorRef) =
   system.processContext(currentContext)
 
 proc createActorSystem(): ActorSystem =
-  ActorSystem(table: initSharedTable[ActorId, Actor]())
+  ActorSystem(table: initSharedTable[ActorId, Actor](), ids: initSharedList[ActorId]())
 
 proc createActor(system: var ActorSystem, id: ActorId,
                  init: ActorInit): ActorRef =
   var actor = Actor(id: id, mailbox: initDeque[Envelope](), behavior: nop)
   var actorRef = ActorRef(id: id)
   var currentContext = system.createActorContext(actorRef)
+  system.ids.add(id)
   init(currentContext)
   actor.behavior = currentContext.behavior
   system.table[id] = actor
@@ -89,20 +91,18 @@ proc createActor(context: var ActorContext, id: ActorId,
   context.system.createActor(id, init)
 
 type
-  Task = proc() {.thread,noSideEffect.}
+  Task = iterator()
   Executor = object
     tasks: seq[Task]
 
 proc submit(executor: var Executor, task: Task) =
+  writeLine(stdout, "submitted task")
   executor.tasks.add(task)
 
 proc start(executor: var Executor) =
-  var t1: Thread[Executor]
-  createThread(t1, (proc(executor: Executor) {.thread.} =
+  while true:
     for t in executor.tasks:
       t()
-  ), executor)
-  joinThread(t1)
 
 
 when isMainModule:
@@ -160,14 +160,18 @@ when isMainModule:
 
   # var t1,t2,t3: Thread[void]
 
+  proc toTask(aref: ActorRef): iterator() =
+    return iterator() {.closure.} =
+      while true:
+        system.process(aref)
+        yield
 
   var executor = Executor(tasks: @[])
-  executor.submit(Task(proc() {.thread.} =
-    while true:
-      system.process(fooRef)
-      system.process(barRef)
-      system.process(bazRef)
-  ))
+  for id in system.ids:
+    let aref = ActorRef(id: id)
+    let t = aref.toTask()
+    executor.submit(t)
+
 
   executor.start()
 
