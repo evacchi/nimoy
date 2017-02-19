@@ -1,5 +1,5 @@
 type
-  Task* = iterator()
+  Task* = proc()
   Executor* = object
     tasks*: seq[Task]
 

@@ -94,13 +94,6 @@ proc createActor(context: var ActorContext, id: ActorId,
                  init: ActorInit): ActorRef =
   context.system.createActor(id, init)
 
-proc asTask(aref: ActorRef): iterator() =
-  return iterator() {.closure.} =
-    while true:
-      system.process(aref)
-      yield
-
-
 when isMainModule:
   var system = createActorSystem()
 
@@ -153,11 +146,14 @@ when isMainModule:
     context.become(receive)
 
 
+  proc makeTask(aref: ActorRef): proc() =
+    return proc() = 
+      system.process(aref)
 
   var executor = createExecutor()
   for id in system.ids:
     let aref = ActorRef(id: id)
-    let t = aref.asTask
+    let t = makeTask(aref)
     executor.submit(t)
 
 
