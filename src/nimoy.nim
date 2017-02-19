@@ -1,4 +1,4 @@
-import sharedtables, sharedlist, deques
+import sharedtables, sharedlist, deques, nimoypkg/tasks
 
 type
   ActorId = int
@@ -17,7 +17,6 @@ type
     message: Message
     sender: ActorRef
     receiver: ActorRef
-
 
   ActorContext = object
     self: ActorRef
@@ -39,29 +38,34 @@ type
 
 
 proc nop(context: var ActorContext, envelope: Envelope) =
-  writeLine(stdout, context.self, ": Unitialized actor could not handle message ", envelope)
+  writeLine(stdout, 
+  context.self, ": Unitialized actor could not handle message ", envelope)
 
 proc send(context: var ActorContext, message: Message, receiver: ActorRef) =
-  let e = Envelope(message: message, sender: context.self, receiver: receiver)
+  let e = Envelope(
+    message: message, 
+    sender: context.self, 
+    receiver: receiver
+  )
   context.outbox.add(e)
 
 proc become(context: var ActorContext, newBehavior: ActorBehavior) =
   context.behavior = newBehavior
 
-proc processContextOutbox(system: var ActorSystem, currentContext: var ActorContext) =
-  for e in currentContext.outbox:
+proc processContextOutbox(system: var ActorSystem, context: var ActorContext) =
+  for e in context.outbox:
     system.table.withValue(e.receiver.id, actor):
       actor.mailbox.addLast(e)
 
-proc processContext(system: var ActorSystem, currentContext: var ActorContext) =
-  system.table.withValue(currentContext.self.id, actor):
+proc processContext(system: var ActorSystem, context: var ActorContext) =
+  system.table.withValue(context.self.id, actor):
     while actor.mailbox.len > 0:
-      currentContext.behavior = actor.behavior
+      context.behavior = actor.behavior
       let e = actor.mailbox.popFirst()
-      actor.behavior(currentContext, e)
-      actor.behavior = currentContext.behavior
+      actor.behavior(context, e)
+      actor.behavior = context.behavior
 
-  system.processContextOutbox(currentContext)
+  system.processContextOutbox(context)
 
 
 proc createActorContext(system: var ActorSystem, actorRef: ActorRef): ActorContext =
@@ -90,19 +94,11 @@ proc createActor(context: var ActorContext, id: ActorId,
                  init: ActorInit): ActorRef =
   context.system.createActor(id, init)
 
-type
-  Task = iterator()
-  Executor = object
-    tasks: seq[Task]
-
-proc submit(executor: var Executor, task: Task) =
-  writeLine(stdout, "submitted task")
-  executor.tasks.add(task)
-
-proc start(executor: var Executor) =
-  while true:
-    for t in executor.tasks:
-      t()
+proc asTask(aref: ActorRef): iterator() =
+  return iterator() {.closure.} =
+    while true:
+      system.process(aref)
+      yield
 
 
 when isMainModule:
@@ -112,7 +108,8 @@ when isMainModule:
     writeLine(stdout, "startup 100")
 
     proc receive(context: var ActorContext, e: Envelope) =
-      writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
+      writeLine(stdout, 
+        context.self, " has received ", e.message, " from ", e.sender)
       context.send(Message(e.message + 1), e.sender)
 
     context.become(receive)
@@ -128,12 +125,12 @@ when isMainModule:
       writeLine(stdout, "DONE.")
 
     proc receive(context: var ActorContext, e: Envelope) =
-      writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
+      writeLine(stdout, 
+        context.self, " has received ", e.message, " from ", e.sender)
       context.send(Message(e.message + 1), e.sender)
       i = i - 1
       if (i <= 100):
         context.become(done)
-
 
     context.become(receive)
 
@@ -153,36 +150,16 @@ when isMainModule:
       if (i <= 100):
         context.become(done)
 
-
     context.become(receive)
 
 
 
-  # var t1,t2,t3: Thread[void]
-
-  proc toTask(aref: ActorRef): iterator() =
-    return iterator() {.closure.} =
-      while true:
-        system.process(aref)
-        yield
-
-  var executor = Executor(tasks: @[])
+  var executor = createExecutor()
   for id in system.ids:
     let aref = ActorRef(id: id)
-    let t = aref.toTask()
+    let t = aref.asTask
     executor.submit(t)
 
 
   executor.start()
 
-
-
-  # createThread(t1, proc() {.thread.} =
-  #  while true:
-  #    system.process(fooRef)
-  #    system.process(barRef)
-  #    system.process(bazRef)
-  # )
-
-
-  # joinThreads(t1)
