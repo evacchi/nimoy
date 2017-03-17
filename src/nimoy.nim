@@ -48,7 +48,7 @@ proc send(context: var ActorContext, message: Message, receiver: ActorRef) =
     receiver: receiver
   )
   context.outbox.add(e)
-
+  
 proc become(context: var ActorContext, newBehavior: ActorBehavior) =
   context.behavior = newBehavior
 
@@ -69,7 +69,7 @@ proc processContext(system: var ActorSystem, context: var ActorContext) =
 
 
 proc createActorContext(system: var ActorSystem, actorRef: ActorRef): ActorContext =
-  ActorContext(self: actorRef, outbox: @[], behavior: nop, system: system)
+  ActorContext(self: actorRef, outbox: @[], behavior: nop, system: system)  
 
 proc process(system: var ActorSystem, actorRef: ActorRef) =
   var currentContext = system.createActorContext(actorRef)
@@ -90,9 +90,9 @@ proc createActor(system: var ActorSystem, id: ActorId,
   system.processContextOutbox(currentContext)
   actorRef
 
-proc createActor(context: var ActorContext, id: ActorId,
-                 init: ActorInit): ActorRef =
-  context.system.createActor(id, init)
+# proc createActor(context: var ActorContext, id: ActorId,
+#                  init: ActorInit): ActorRef =
+#   context.system.createActor(id, init)
 
 when isMainModule:
   var system = createActorSystem()
