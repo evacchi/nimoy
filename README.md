@@ -2,4 +2,4 @@
 
 An experimental minimal actor library for Nim.
 
-[nimoy-icon]: imgs/nimoy.png
+[nimoy-icon]: img/nimoy.png
