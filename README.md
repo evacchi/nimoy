@@ -1,5 +1,4 @@
-#  ![Nimoy Icon][nimoy-icon] Nimoy
+#  <img align=left src="img/nimoy.png" alt="Nimoy Icon" /> Nimoy
 
 An experimental minimal actor library for Nim.
 
-[nimoy-icon]: img/nimoy.png
