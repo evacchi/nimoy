@@ -1,9 +1,10 @@
-import locks, conslist
+import locks, deques
 
 type
-  SharedDeque*[T] = object
-    list: List[T]
+  SharedDequeObj[T] = object
+    deque: Deque[T]
     lock: Lock
+  SharedDeque*[T] = ptr SharedDequeObj[T]
 
 template withLock(t, x: untyped) =
   acquire(t.lock)
@@ -11,21 +12,20 @@ template withLock(t, x: untyped) =
   release(t.lock)
 
 proc initSharedDeque*[A](initialSize: int = 4): SharedDeque[A] =
+  result = cast[SharedDeque[A]](allocShared0(sizeof(SharedDeque[A])))
   initLock result.lock
-  result.list = Nil[A]()
+  result.deque = initDeque[A](initialSize)
 
-proc prepend*[T](shdeq: var SharedDeque[T], item: T) =
+proc append*[T](shdeq: SharedDeque[T], item: T) =
   ## Add an `item` to the end of the `deq`.
   withLock(shdeq):
-    shdeq.list = Cons(item, shdeq.list)
+    shdeq.deque.addLast(item)
 
 iterator items*[T](deq: SharedDeque[T]) : T =
-  for item in deq.list:
+  for item in deq[].deque.items:
     yield item
 
 iterator pairs*[T](deq: SharedDeque[T]): tuple[key: int, val: T] =
-  var i = 0.int
-  for v in deq.list:
-    yield (i,v) 
-    inc i
-
+  for i, v in deq[].deque.pairs:
+    yield (i,v)
+    
