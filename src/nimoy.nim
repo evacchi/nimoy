@@ -161,16 +161,9 @@ when isMainModule:
 
 
 
-  # executor.submit(t)
-  # executor.start()
-
-  var w1 = initWorker(1)
-  var w2 = initWorker(1)
-  w1.submit(tbar)
-  w2.submit(tfoo)
+  executor.submit(Task(tfoo))
+  executor.submit(Task(tbar))
 
   bar.send(Envelope(message: 1, sender: foo))
 
-
-  while true:
-    discard 
+  executor.start()
