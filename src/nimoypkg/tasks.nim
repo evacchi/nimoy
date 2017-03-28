@@ -1,7 +1,7 @@
 import sequtils, sharedlist, os, locks
 
 type
-  Task*    = proc() {.thread.}
+  Task*    = proc() {.gcsafe.}
   TaskList = seq[Task]
 
   SharedChannel*[T] = ptr Channel[T]
@@ -38,12 +38,12 @@ proc send*[T](c: SharedChannel[T], t: T) =
 
 proc createExecutor*(): Executor =
   result.tasks = @[]
-  
+
 proc submit*(executor: var Executor, task: Task) =
   echo "task submitted"
   executor.tasks.add(task)
 
-proc worker(workerData: (WorkerId, WorkerChannel)) {.thread.} =
+proc worker(workerData: (WorkerId, WorkerChannel)) {.gcsafe.} =
   let (id, channel) = workerData
   echo "worker #", $id, " has started"
   var tasks: seq[Task] = @[]
@@ -86,7 +86,7 @@ proc start*(executor: var Executor) =
 
   while true:
     discard
-  
+
 
 when isMainModule:
   proc ciao() =
@@ -95,7 +95,7 @@ when isMainModule:
     stdout.writeLine "hello"
   proc salut() =
     stdout.writeLine "salut"
-    
+
   proc main() =
     var executor = createExecutor()
 
@@ -107,7 +107,3 @@ when isMainModule:
 
   var thread: Thread[void]
   createThread(thread, main)
-
-  
-
-

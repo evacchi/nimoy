@@ -6,9 +6,7 @@ type
   Actor = object
     id: ActorId
     mailbox: SharedChannel[Envelope]
-    system:  ActorSystem
     behavior: ActorBehavior
-
 
   Message = int
 
@@ -16,41 +14,22 @@ type
     message:  Message
     sender:   Actor
 
-  ActorContext = object
-    self:     Actor
-    behavior: ActorBehavior
-    system:   ActorSystem
-
   ActorBehavior =
-    proc(context: var ActorContext, envelope: Envelope)
-
-  ActorInit =
-    proc(context: var ActorContext)
-
-  ActorSystem = object
-    # table: SharedTable[ActorId, Actor]
-    # ids: SharedList[ActorId]
+    proc(context: var Actor, envelope: Envelope)
 
 
-proc nop(context: var ActorContext, envelope: Envelope) =
-  writeLine(stdout, 
-  context.self, ": Unitialized actor could not handle message ", envelope)
+proc nop(self: var Actor, envelope: Envelope) =
+  writeLine(stdout, self, ": Unitialized actor could not handle message ", envelope)
 
-proc send(context: var ActorContext, message: Message, receiver: Actor) =
+proc send(self: var Actor, message: Message, receiver: Actor) =
   let e = Envelope(
-    message: message, 
-    sender: context.self
+    message: message,
+    sender: self
   )
   receiver.mailbox.send(e)
-  
-proc become(context: var ActorContext, newBehavior: ActorBehavior) =
-  context.behavior = newBehavior
 
-proc createActorContext(system: ActorSystem, actor: Actor): ActorContext =
-  ActorContext(self: actor, behavior: actor.behavior, system: system)  
-
-proc createActorSystem(): ActorSystem =
-  ActorSystem()
+proc become(actor: var Actor, newBehavior: ActorBehavior) =
+  actor.behavior = newBehavior
 
 # proc createActor(system: var ActorSystem, id: ActorId, init: ActorInit): Actor =
 #   var actor = Actor(id: id, mailbox: newSharedChannel[Envelope](), behavior: nop)
@@ -59,61 +38,50 @@ proc createActorSystem(): ActorSystem =
 #   actor.behavior = currentContext.behavior
 #   actor
 
-proc send(actor: Actor, envelope: Envelope) = 
+proc send(actor: Actor, envelope: Envelope) =
   actor.mailbox.send(envelope)
 
 
-template createTask(initActorBody: untyped): auto =
-  let r = (block:
-    var channel = newSharedChannel[Envelope]()
-    var receive: ActorBehavior = initActorBody
-    var actor = Actor(mailbox: channel, behavior: receive)
-    echo $(actor)
-    let t = proc() {.thread.} =
-      let (hasMsg, msg) = actor.mailbox.tryRecv()
-      var context = actor.system.createActorContext(actor)
-      if hasMsg:
-        echo "receive:"
-        context.behavior(context, msg)
-        actor.behavior = context.behavior
-        
-    (actor, t))
-  r
+proc makeTask(init: proc(self: var Actor)): auto =
+  var channel = newSharedChannel[Envelope]()
+  var actor = Actor(mailbox: channel, behavior: nop)
+  init(actor)
+  echo $(actor)
+  let t = proc() {.gcsafe.} =
+    let (hasMsg, msg) = actor.mailbox.tryRecv()
+    if hasMsg:
+      actor.behavior(actor, msg)
 
+
+  (actor, t)
 
 when isMainModule:
-  var system = createActorSystem()
-  var executor = createExecutor()        
+  var executor = createExecutor()
 
-  let (foo, tfoo) = (
-    block:
-      createTask:
-        var count = 0
-        proc done(context: var ActorContext, e: Envelope) =
-          writeLine(stdout, "DONE.")
+  let (foo, tfoo) = makeTask do (self: var Actor):
+    var count = 0
+    proc done(self: var Actor, e: Envelope) =
+      writeLine(stdout, "DONE.")
 
-        proc receive(context: var ActorContext, e: Envelope) =
-          writeLine(stdout, 
-            "foo has received ", e.message, " from ", e.sender)
-          e.sender.mailbox.send(Envelope(message: e.message + 1, sender: context.self))
-          count += 1
-          if count >= 10:
-            context.become(done)
+    proc receive(self: var Actor, e: Envelope) =
+      writeLine(stdout,
+        "foo has received ", e.message, " from ", e.sender)
+      e.sender.mailbox.send(Envelope(message: e.message + 1, sender: self))
+      count += 1
+      if count >= 10:
+        self.become(done)
 
-        receive
-  )
+    self.become(receive)
 
-  let (bar, tbar) = (
-    block:
-      createTask:
-        proc receive(context: var ActorContext, e: Envelope) =
-          writeLine(stdout, 
-            "bar has received ", e.message, " from ", e.sender)
-          e.sender.send(Envelope(message: e.message + 1, sender: context.self))
-          e.sender.send(Envelope(message: e.message - 1, sender: context.self))
+  let (bar, tbar) = makeTask do (self: var Actor):
+    proc receive(self: var Actor, e: Envelope) =
+      writeLine(stdout,
+        "bar has received ", e.message, " from ", e.sender)
+      e.sender.send(Envelope(message: e.message + 1, sender: self))
+      e.sender.send(Envelope(message: e.message - 1, sender: self))
 
-        receive
-  )
+    self.become(receive)
+
 
 
 
@@ -136,7 +104,7 @@ when isMainModule:
   #     writeLine(stdout, "DONE.")
 
   #   proc receive(context: var ActorContext, e: Envelope) =
-  #     writeLine(stdout, 
+  #     writeLine(stdout,
   #       context.self, " has received ", e.message, " from ", e.sender)
   #     context.send(Message(e.message + 1), e.sender)
   #     i = i - 1
@@ -170,8 +138,3 @@ when isMainModule:
 #   init(currentContext)
 #   actor.behavior = currentContext.behavior
 #   actor
-
-
-
-
-  
