@@ -21,7 +21,7 @@ type
     workers: array[2, Worker]
 
 proc newSharedChannel*[T](): SharedChannel[T] =
-  result = cast[WorkerChannel](allocShared0(sizeof(Channel[Task])))
+  result = cast[WorkerChannel](allocShared0(sizeof(Channel[T])))
   result[].open()
 
 proc peek[T](c: SharedChannel[T]): int =
