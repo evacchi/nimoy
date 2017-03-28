@@ -1,57 +1,53 @@
 import sharedtables, sharedlist, deques, nimoypkg/tasks
 
 type
-  ActorId = int
 
-  ActorObj = object
-    id: ActorId
-    mailbox: Channel[Envelope]
-    behavior: ActorBehavior
+  ActorObj[A] = object
+    mailbox: Channel[Envelope[A]]
+    behavior: ActorBehavior[A]
 
-  Actor = ptr ActorObj
-  ActorRef = distinct pointer
+  Actor[A] = ptr ActorObj[A]
+  ActorRef[A] = distinct pointer
 
-  Message = int
+  Envelope[A] = object
+    message:  A
+    sender:   ActorRef[A]
 
-  Envelope = object
-    message:  Message
-    sender:   ActorRef
-
-  ActorBehavior =
-    proc(context: ActorRef, envelope: Envelope)
+  ActorBehavior[A] =
+    proc(context: ActorRef[A], envelope: Envelope[A])
 
 
-proc nop(self: ActorRef, envelope: Envelope) =
+proc nop[A](self: ActorRef[A], envelope: Envelope[A]) =
   writeLine(stdout, "Unitialized actor could not handle message ", envelope)
 
-proc send(self: ActorRef, message: Message, receiver: ActorRef) =
+proc send[A](self: ActorRef[A], message: A, receiver: ActorRef[A]) =
   let e = Envelope(
     message: message,
     sender: self
   )
   cast[Actor](receiver).mailbox.send(e)
 
-proc become(actor: ActorRef, newBehavior: ActorBehavior) =
-  cast[Actor](actor).behavior = newBehavior
+proc become[A](actor: ActorRef[A], newBehavior: ActorBehavior[A]) =
+  cast[Actor[A]](actor).behavior = newBehavior
 
-proc send(actor: ActorRef, envelope: Envelope) =
-  cast[Actor](actor).mailbox.send(envelope)
+proc send[A](actor: ActorRef[A], envelope: Envelope[A]) =
+  cast[Actor[A]](actor).mailbox.send(envelope)
 
-proc send(actor: Actor, envelope: Envelope) =
+proc send[A](actor: Actor[A], envelope: Envelope[A]) =
   actor.mailbox.send(envelope)
 
-proc createActor(init: proc(self: ActorRef)): auto =
-  var actor = cast[Actor](allocShared0(sizeof(ActorObj)))
+proc createActor[A](init: proc(self: ActorRef[A])): auto =
+  var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.mailbox.open()
   actor.behavior = nop
-  let actorRef = cast[ActorRef](actor)
+  let actorRef = cast[ActorRef[A]](actor)
   init(actorRef)
   actorRef
 
 
-proc toTask(actorRef: ActorRef): auto =
+proc toTask[A](actorRef: ActorRef[A]): auto =
   return proc() {.gcsafe.} =
-    let actor = cast[Actor](actorRef)
+    let actor = cast[Actor[A]](actorRef)
     let (hasMsg, msg) = actor.mailbox.tryRecv()
     if hasMsg:
       actor.behavior(actorRef, msg)
@@ -61,12 +57,12 @@ proc toTask(actorRef: ActorRef): auto =
 when isMainModule:
   var executor = createExecutor()
 
-  let foo = createActor do (self: ActorRef):
+  let foo = createActor[int] do (self: ActorRef[int]):
     var count = 0
-    proc done(self: ActorRef, e: Envelope) =
+    proc done(self: ActorRef[int], e: Envelope) =
       writeLine(stdout, "DISCARD.")
 
-    proc receive(self: ActorRef, e: Envelope) =
+    proc receive(self: ActorRef[int], e: Envelope) =
       writeLine(stdout,
         "foo has received ", e.message)
       e.sender.send(Envelope(message: e.message + 1, sender: self))
@@ -76,11 +72,11 @@ when isMainModule:
 
     self.become(receive)
 
-  let bar = createActor do (self: ActorRef):
-    proc receive(self: ActorRef, e: Envelope) =
+  let bar = createActor do (self: ActorRef[int]):
+    proc receive(self: ActorRef[int], e: Envelope[int]) =
       writeLine(stdout,
         "bar has received ", e.message)
-      e.sender.send(Envelope(message: e.message + 1, sender: self))
+      e.sender.send(Envelope[int](message: e.message + 1, sender: self))
 
     self.become(receive)
 
@@ -90,7 +86,7 @@ when isMainModule:
   executor.submit(foo.toTask())
   executor.submit(bar.toTask())
 
-  bar.send(Envelope(message: 1, sender: foo))
+  bar.send(Envelope[int](message: 1, sender: foo))
 
   executor.start()
 
