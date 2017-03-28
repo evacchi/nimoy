@@ -9,69 +9,75 @@ type
     behavior: ActorBehavior
 
   Actor = ptr ActorObj
+  ActorRef = distinct pointer
 
   Message = int
 
   Envelope = object
     message:  Message
-    sender:   Actor
+    sender:   ActorRef
 
   ActorBehavior =
-    proc(context: Actor, envelope: Envelope)
+    proc(context: ActorRef, envelope: Envelope)
 
 
-proc nop(self: Actor, envelope: Envelope) =
-  writeLine(stdout, self[], ": Unitialized actor could not handle message ", envelope)
+proc nop(self: ActorRef, envelope: Envelope) =
+  writeLine(stdout, "Unitialized actor could not handle message ", envelope)
 
-proc send(self: Actor, message: Message, receiver: Actor) =
+proc send(self: ActorRef, message: Message, receiver: ActorRef) =
   let e = Envelope(
     message: message,
     sender: self
   )
-  receiver[].mailbox.send(e)
+  cast[Actor](receiver).mailbox.send(e)
 
-proc become(actor: Actor, newBehavior: ActorBehavior) =
-  actor[].behavior = newBehavior
+proc become(actor: ActorRef, newBehavior: ActorBehavior) =
+  cast[Actor](actor).behavior = newBehavior
+
+proc send(actor: ActorRef, envelope: Envelope) =
+  cast[Actor](actor).mailbox.send(envelope)
 
 proc send(actor: Actor, envelope: Envelope) =
   actor.mailbox.send(envelope)
 
-proc createActor(init: proc(self: Actor)): auto =
+proc createActor(init: proc(self: ActorRef)): auto =
   var actor = cast[Actor](allocShared0(sizeof(ActorObj)))
-  actor[].mailbox.open()
-  actor[].behavior = nop
-  init(actor)
-  actor
+  actor.mailbox.open()
+  actor.behavior = nop
+  let actorRef = cast[ActorRef](actor)
+  init(actorRef)
+  actorRef
 
 
-proc toTask(actor: Actor): auto =
+proc toTask(actorRef: ActorRef): auto =
   return proc() {.gcsafe.} =
+    let actor = cast[Actor](actorRef)
     let (hasMsg, msg) = actor.mailbox.tryRecv()
     if hasMsg:
-      actor[].behavior(actor, msg)
+      actor.behavior(actorRef, msg)
 
 
 
 when isMainModule:
   var executor = createExecutor()
 
-  let foo = createActor do (self: Actor):
+  let foo = createActor do (self: ActorRef):
     var count = 0
-    proc done(self: Actor, e: Envelope) =
+    proc done(self: ActorRef, e: Envelope) =
       writeLine(stdout, "DISCARD.")
 
-    proc receive(self: Actor, e: Envelope) =
+    proc receive(self: ActorRef, e: Envelope) =
       writeLine(stdout,
         "foo has received ", e.message)
-      e.sender.mailbox.send(Envelope(message: e.message + 1, sender: self))
+      e.sender.send(Envelope(message: e.message + 1, sender: self))
       count += 1
       if count >= 10:
         self.become(done)
 
     self.become(receive)
 
-  let bar = createActor do (self: Actor):
-    proc receive(self: Actor, e: Envelope) =
+  let bar = createActor do (self: ActorRef):
+    proc receive(self: ActorRef, e: Envelope) =
       writeLine(stdout,
         "bar has received ", e.message)
       e.sender.send(Envelope(message: e.message + 1, sender: self))
