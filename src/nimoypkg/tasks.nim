@@ -4,37 +4,21 @@ type
   Task*    = proc() {.gcsafe.}
   TaskList = seq[Task]
 
-  SharedChannel*[T] = ptr Channel[T]
-  WorkerChannel*   = SharedChannel[Task]
-  WorkerId*        = int
-  WorkerThread*    = ptr Thread[(WorkerId, WorkerChannel)]
+  WorkerId* = int
 
-
-  Worker* = object
+  WorkerObj* = object
     id:      WorkerId
-    channel: WorkerChannel
-    thread:  WorkerThread
+    channel: Channel[Task]
+    thread:  Thread[Worker]
+
+
+  Worker = ptr WorkerObj
 
   Executor* = object
     tasks*: TaskList
     lock:   Lock
     workers: array[2, Worker]
 
-proc newSharedChannel*[T](): SharedChannel[T] =
-  result = cast[SharedChannel[T]](allocShared0(sizeof(Channel[T])))
-  result[].open()
-
-proc peek[T](c: SharedChannel[T]): int =
-  c[].peek()
-
-proc tryRecv*[T](c: SharedChannel[T]): (bool, T) =
-  c[].tryRecv()
-
-proc recv[T](c: SharedChannel[T]): T =
-  c[].recv()
-
-proc send*[T](c: SharedChannel[T], t: T) =
-  c[].send(t)
 
 proc createExecutor*(): Executor =
   result.tasks = @[]
@@ -43,14 +27,13 @@ proc submit*(executor: var Executor, task: Task) =
   echo "task submitted"
   executor.tasks.add(task)
 
-proc worker(workerData: (WorkerId, WorkerChannel)) {.gcsafe.} =
-  let (id, channel) = workerData
-  echo "worker #", $id, " has started"
+proc worker(worker: Worker) {.gcsafe.} =
+  echo "worker #", $(worker[].id), " has started"
   var tasks: seq[Task] = @[]
   while true:
-    let (hasTask, t) = channel[].tryRecv()
+    let (hasTask, t) = worker[].channel.tryRecv()
     if (hasTask):
-      echo "worker #", $id, " got new task"
+      echo "worker #", $(worker[].id), " got new task"
       tasks.add(t)
       t()
     else:
@@ -59,15 +42,16 @@ proc worker(workerData: (WorkerId, WorkerChannel)) {.gcsafe.} =
 
 
 proc initWorker*(id: int): Worker =
-  result.id = id
-  result.channel = newSharedChannel[Task]()
-  result.thread = cast[WorkerThread](allocShared0(sizeof(Thread[Worker])))
+  let w = cast[Worker](allocShared0(sizeof(WorkerObj)))
+  w[].id = id
+  w[].channel.open()
 
-  createThread(result.thread[], worker, (id, result.channel))
+  createThread(w[].thread, worker, w)
+  return w
 
-proc submit*(worker: var Worker, task: Task) =
+proc submit*(worker: Worker, task: Task) =
   echo "task submitted to worker"
-  worker.channel.send(task)
+  worker[].channel.send(task)
 
 
 proc start*(executor: var Executor) =
@@ -84,4 +68,3 @@ proc start*(executor: var Executor) =
 
   while true:
     discard
-
