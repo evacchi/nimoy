@@ -14,7 +14,5 @@ proc main() =
 
   executor.start()
 
-var thread: Thread[void]
-
 main()
 

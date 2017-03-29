@@ -35,7 +35,7 @@ proc send*[A](actor: ActorRef[A], envelope: Envelope[A]) =
 proc send*[A](actor: Actor[A], envelope: Envelope[A]) =
   actor.mailbox.send(envelope)
 
-proc createActor*[A](init: proc(self: ActorRef[A])): auto =
+proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.mailbox.open()
   actor.behavior = nop
@@ -43,8 +43,11 @@ proc createActor*[A](init: proc(self: ActorRef[A])): auto =
   init(actorRef)
   actorRef
 
+proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
+  createActor[int] do (self: ActorRef[int]):
+    self.become(receive)
 
-proc toTask*[A](actorRef: ActorRef[A]): auto =
+proc toTask*[A](actorRef: ActorRef[A]): Task =
   return proc() {.gcsafe.} =
     let actor = cast[Actor[A]](actorRef)
     let (hasMsg, msg) = actor.mailbox.tryRecv()
