@@ -74,7 +74,6 @@ proc submit*(worker: var Worker, task: Task) =
 proc start*(executor: var Executor) =
   var w1 = initWorker(1)
   var w2 = initWorker(2)
-  sleep(100)
   var i = 0
   for t in executor.tasks.items:
     echo "send task ", $i
