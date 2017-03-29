@@ -1,4 +1,4 @@
-import nimoypkg/tasks
+import nimoy/tasks
 
 type
   ActorObj*[A] = object
