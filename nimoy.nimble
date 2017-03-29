@@ -31,6 +31,15 @@ task become, "compile become":
   --path: "src"
   setCommand "c", "examples/become.nim"
 
+task spawn, "compile spawn":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/spawn.nim"
 
 task hellotasks, "compile hellotasks":
   --hints: off
