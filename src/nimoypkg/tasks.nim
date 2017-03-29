@@ -1,4 +1,4 @@
-import sequtils, sharedlist, os, locks
+import os, locks
 
 type
   Task*    = proc() {.gcsafe.}
@@ -87,23 +87,3 @@ proc start*(executor: var Executor) =
   while true:
     discard
 
-
-when isMainModule:
-  proc ciao() =
-    stdout.writeLine "ciao"
-  proc hello() =
-    stdout.writeLine "hello"
-  proc salut() =
-    stdout.writeLine "salut"
-
-  proc main() =
-    var executor = createExecutor()
-
-    executor.submit(Task(ciao))
-    executor.submit(Task(hello))
-    executor.submit(Task(salut))
-
-    executor.start()
-
-  var thread: Thread[void]
-  createThread(thread, main)

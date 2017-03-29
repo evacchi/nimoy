@@ -10,3 +10,23 @@ license       = "MIT"
 requires "nim >= 0.16.0"
 
 srcDir = "src"
+
+task pingpong, "compile pingpong":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/pingpong.nim"
+
+task hellotasks, "compile hellotasks":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/hellotasks.nim"
