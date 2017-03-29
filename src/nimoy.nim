@@ -30,10 +30,6 @@ proc send[A](self: ActorRef[A], message: A, receiver: ActorRef[A]) =
 proc become[A](actor: ActorRef[A], newBehavior: ActorBehavior[A]) =
   cast[Actor[A]](actor).behavior = newBehavior
 
-
-proc send[A](sender: ActorRef[A], message: A) =
-  cast[Actor[A]](sender).mailbox.send(Envelope[A](message: message, sender: sender))
-
 proc send[A](actor: ActorRef[A], envelope: Envelope[A]) =
   cast[Actor[A]](actor).mailbox.send(envelope)
 
@@ -67,7 +63,7 @@ when isMainModule:
 
     proc receive(self: ActorRef[int], e: Envelope[int]) =
       echo "foo has received ", e.message
-      e.sender.send(e.message + 1)
+      e.sender.send(Envelope[int](message: e.message + 1, sender: self))
       count += 1
       if count >= 10:
         self.become(done)
@@ -77,7 +73,7 @@ when isMainModule:
   let bar = createActor do (self: ActorRef[int]):
     proc receive(self: ActorRef[int], e: Envelope[int]) =
       echo "bar has received ", e.message
-      e.sender.send(e.message + 1)
+      e.sender.send(Envelope[int](message: e.message + 1, sender: self))
 
     self.become(receive)
 
