@@ -48,7 +48,6 @@ proc worker(workerData: (WorkerId, WorkerChannel)) {.gcsafe.} =
   echo "worker #", $id, " has started"
   var tasks: seq[Task] = @[]
   while true:
-    sleep(100)
     let (hasTask, t) = channel[].tryRecv()
     if (hasTask):
       echo "worker #", $id, " got new task"
