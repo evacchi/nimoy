@@ -30,6 +30,10 @@ proc send[A](self: ActorRef[A], message: A, receiver: ActorRef[A]) =
 proc become[A](actor: ActorRef[A], newBehavior: ActorBehavior[A]) =
   cast[Actor[A]](actor).behavior = newBehavior
 
+
+proc send[A](sender: ActorRef[A], message: A) =
+  cast[Actor[A]](sender).mailbox.send(Envelope[A](message: message, sender: sender))
+
 proc send[A](actor: ActorRef[A], envelope: Envelope[A]) =
   cast[Actor[A]](actor).mailbox.send(envelope)
 
@@ -59,24 +63,22 @@ when isMainModule:
 
   let foo = createActor[int] do (self: ActorRef[int]):
     var count = 0
-    proc done(self: ActorRef[int], e: Envelope) =
-      writeLine(stdout, "DISCARD.")
+    proc done(self: ActorRef[int], e: Envelope[int]) =
+      echo "DISCARD."
 
-    proc receive(self: ActorRef[int], e: Envelope) =
-      writeLine(stdout,
-        "foo has received ", e.message)
-      e.sender.send(Envelope(message: e.message + 1, sender: self))
+    proc receive(self: ActorRef[int], e: Envelope[int]) =
+      echo "foo has received ", e.message
+      e.sender.send(e.message + 1)
       count += 1
       if count >= 10:
         self.become(done)
 
-    self.become(receive)
+    self.become(ActorBehavior[int](receive))
 
   let bar = createActor do (self: ActorRef[int]):
     proc receive(self: ActorRef[int], e: Envelope[int]) =
-      writeLine(stdout,
-        "bar has received ", e.message)
-      e.sender.send(Envelope[int](message: e.message + 1, sender: self))
+      echo "bar has received ", e.message
+      e.sender.send(e.message + 1)
 
     self.become(receive)
 
@@ -90,49 +92,3 @@ when isMainModule:
 
   executor.start()
 
-
-  # let barRef = system.createActor(200) do (context: var ActorContext):
-  #   writeLine(stdout, "startup 200")
-  #   context.send(Message(1), fooRef)
-
-  #   # state
-  #   var i = 1000
-
-  #   proc done(context: var ActorContext, e: Envelope) =
-  #     writeLine(stdout, "DONE.")
-
-  #   proc receive(context: var ActorContext, e: Envelope) =
-  #     writeLine(stdout,
-  #       context.self, " has received ", e.message, " from ", e.sender)
-  #     context.send(Message(e.message + 1), e.sender)
-  #     i = i - 1
-  #     if (i <= 100):
-  #       context.become(done)
-
-  #   context.become(receive)
-
-  # let bazRef = system.createActor(300) do (context: var ActorContext):
-  #   writeLine(stdout, "startup 300")
-  #   context.send(Message(3), fooRef)
-
-  #   var i = 1000
-
-  #   proc done(context: var ActorContext, e: Envelope) =
-  #     writeLine(stdout, "DONE.")
-
-  #   proc receive(context: var ActorContext, e: Envelope) =
-  #     writeLine(stdout, context.self, " has received ", e.message, " from ", e.sender)
-  #     context.send(Message(e.message + 1), e.sender)
-  #     i = i - 1
-  #     if (i <= 100):
-  #       context.become(done)
-
-  #   context.become(receive)
-
-
-# proc createActor(system: var ActorSystem, id: ActorId, init: ActorInit): Actor =
-#   var actor = Actor(id: id, mailbox: newSharedChannel[Envelope](), behavior: nop)
-#   var currentContext = system.createActorContext(actor)
-#   init(currentContext)
-#   actor.behavior = currentContext.behavior
-#   actor
