@@ -1,4 +1,4 @@
-import os, locks
+import locks
 
 type
   Task*    = proc() {.gcsafe.}
