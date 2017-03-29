@@ -21,6 +21,17 @@ task pingpong, "compile pingpong":
   --path: "src"
   setCommand "c", "examples/pingpong.nim"
 
+task become, "compile become":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/become.nim"
+
+
 task hellotasks, "compile hellotasks":
   --hints: off
   --threads:on
