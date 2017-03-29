@@ -9,5 +9,4 @@ license       = "MIT"
 
 requires "nim >= 0.16.0"
 
-bin = @["nimoy"]
 srcDir = "src"
