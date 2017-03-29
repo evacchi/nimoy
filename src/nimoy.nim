@@ -59,7 +59,6 @@ proc toTask[A](actorRef: ActorRef[A]): auto =
 
 
 when isMainModule:
-  var executor = createExecutor()
 
   let foo = createActor[int] do (self: ActorRef[int]):
     var count = 0
@@ -83,7 +82,7 @@ when isMainModule:
     self.become(receive)
 
 
-
+  var executor = createExecutor()
 
   executor.submit(foo.toTask())
   executor.submit(bar.toTask())
