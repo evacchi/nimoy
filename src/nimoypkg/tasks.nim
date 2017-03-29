@@ -46,8 +46,6 @@ proc submit*(worker: Worker, task: Task) =
   worker[].channel.send(task)
 
 
-
-
 proc executorLoop(executor: Executor) {.gcsafe.} =
   echo "executor has started"
   var tasks: seq[Task] = @[]

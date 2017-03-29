@@ -15,6 +15,9 @@ type
   ActorBehavior*[A] =
     proc(context: ActorRef[A], envelope: Envelope[A])
 
+  ActorSystem = object
+    executor: Executor
+
 
 proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
   writeLine(stdout, "Unitialized actor could not handle message ", envelope)
@@ -44,7 +47,7 @@ proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   actorRef
 
 proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
-  createActor[int] do (self: ActorRef[int]):
+  createActor[A] do (self: ActorRef[int]):
     self.become(receive)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
@@ -54,3 +57,20 @@ proc toTask*[A](actorRef: ActorRef[A]): Task =
     if hasMsg:
       actor.behavior(actorRef, msg)
 
+proc createActorSystem*(): ActorSystem =
+  result.executor = createExecutor()
+
+proc join*(system: ActorSystem) =
+  system.executor.join()
+
+proc createActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
+  let actorRef = createActor[A](init)
+  let task = actorRef.toTask
+  system.executor.submit(task)
+  actorRef
+
+proc createActor*[A](system: ActorSystem, receive: ActorBehavior[A]): ActorRef[A] =
+  let actorRef = createActor[A](receive)
+  let task = actorRef.toTask
+  system.executor.submit(task)
+  actorRef
