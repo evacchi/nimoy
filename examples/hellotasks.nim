@@ -1,3 +1,5 @@
+import nimoypkg/tasks
+
 proc ciao() =
   stdout.writeLine "ciao"
 proc hello() =
@@ -15,4 +17,3 @@ proc main() =
   executor.start()
 
 main()
-
