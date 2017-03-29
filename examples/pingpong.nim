@@ -1,5 +1,6 @@
 import nimoy, nimoypkg/tasks
 
+# ping receives at least 10 msgs then becomes "done"
 let ping = createActor[int] do (self: ActorRef[int]):
   var count = 0
   proc done(self: ActorRef[int], e: Envelope[int]) =
@@ -14,6 +15,7 @@ let ping = createActor[int] do (self: ActorRef[int]):
 
   self.become(ActorBehavior[int](receive))
 
+# pong responds to foo
 let pong = createActor do (self: ActorRef[int]):
   proc receive(self: ActorRef[int], e: Envelope[int]) =
     echo "pong has received ", e.message
@@ -27,7 +29,9 @@ var executor = createExecutor()
 executor.submit(ping.toTask())
 executor.submit(pong.toTask())
 
+# kick it off 
 pong.send(Envelope[int](message: 1, sender: ping))
 
+# start the execution
 executor.start()
 
