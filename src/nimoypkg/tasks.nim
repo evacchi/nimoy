@@ -2,7 +2,6 @@ import os, locks
 
 type
   Task*    = proc() {.gcsafe.}
-  TaskList = seq[Task]
 
   WorkerId* = int
 
@@ -11,23 +10,17 @@ type
     channel: Channel[Task]
     thread:  Thread[Worker]
 
-
   Worker = ptr WorkerObj
 
-  Executor* = object
-    tasks*: TaskList
-    lock:   Lock
+  ExecutorObj* = object
     workers: array[2, Worker]
+    channel: Channel[Task]
+    thread:  Thread[Executor]
+
+  Executor* = ptr ExecutorObj
 
 
-proc createExecutor*(): Executor =
-  result.tasks = @[]
-
-proc submit*(executor: var Executor, task: Task) =
-  echo "task submitted"
-  executor.tasks.add(task)
-
-proc worker(worker: Worker) {.gcsafe.} =
+proc workerLoop(worker: Worker) {.gcsafe.} =
   echo "worker #", $(worker[].id), " has started"
   var tasks: seq[Task] = @[]
   while true:
@@ -41,30 +34,48 @@ proc worker(worker: Worker) {.gcsafe.} =
         t()
 
 
-proc initWorker*(id: int): Worker =
+proc createWorker*(id: int): Worker =
   let w = cast[Worker](allocShared0(sizeof(WorkerObj)))
-  w[].id = id
-  w[].channel.open()
-
-  createThread(w[].thread, worker, w)
-  return w
+  w.id = id
+  w.channel.open()
+  createThread(w.thread, workerLoop, w)
+  w
 
 proc submit*(worker: Worker, task: Task) =
   echo "task submitted to worker"
   worker[].channel.send(task)
 
 
-proc start*(executor: var Executor) =
-  var w1 = initWorker(1)
-  var w2 = initWorker(2)
-  var i = 0
-  for t in executor.tasks.items:
-    echo "send task ", $i
-    if i mod 2 == 0:
-      w1.submit(t)
-    else:
-      w2.submit(t)
-    inc i
+
+
+proc executorLoop(executor: Executor) {.gcsafe.} =
+  echo "executor has started"
+  var tasks: seq[Task] = @[]
+  var counter = 0
+  var w1 = createWorker(1)
+  var w2 = createWorker(2)
 
   while true:
-    discard
+    let (hasTask, t) = executor[].channel.tryRecv()
+    if (hasTask):
+      echo "executor got new task"
+      if counter mod 2 == 0:
+        w1.submit(t)
+      else:
+        w2.submit(t)
+      inc counter
+
+
+proc createExecutor*(): Executor =
+  let e = cast[Executor](allocShared0(sizeof(ExecutorObj)))
+  e.channel.open()
+  createThread(e.thread, executorLoop, e)
+  e
+
+proc submit*(executor: Executor, task: Task) =
+  echo "task submitted"
+  executor[].channel.send(task)
+
+
+proc join*(executor: Executor) =
+  executor.thread.joinThread()

@@ -14,6 +14,6 @@ proc main() =
   executor.submit(Task(hello))
   executor.submit(Task(salut))
 
-  executor.start()
+  executor.join()
 
 main()

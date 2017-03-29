@@ -29,9 +29,8 @@ var executor = createExecutor()
 executor.submit(ping.toTask())
 executor.submit(pong.toTask())
 
-# kick it off 
+# kick it off
 pong.send(Envelope[int](message: 1, sender: ping))
 
 # start the execution
-executor.start()
-
+executor.join()
