@@ -16,6 +16,12 @@ type
   Executor* = ptr ExecutorObj
 
 
+proc join*(executor: Executor) =
+  executor.thread.joinThread()
+
+proc submit*(worker: Worker, task: Task) =
+  worker.channel.send(task)
+
 proc submit*(executor: Executor, task: Task) =
   executor.channel.send(task)
 
@@ -26,16 +32,6 @@ proc workerLoop(self: Worker) {.gcsafe.} =
       t()
       self.parent.submit(t)
 
-proc createWorker*(id: int, parent: Executor): Worker =
-  result = cast[Worker](allocShared0(sizeof(WorkerObj)))
-  result.id = id
-  result.channel.open()
-  result.parent = parent
-  createThread(result.thread, workerLoop, result)
-
-proc submit*(worker: Worker, task: Task) =
-  worker.channel.send(task)
-
 proc executorLoop(executor: Executor) {.gcsafe.} =
   echo "executor has started"
   var workerId = 0
@@ -44,7 +40,14 @@ proc executorLoop(executor: Executor) {.gcsafe.} =
     if (hasTask):
       executor.workers[workerId].submit(t)
       workerId = (workerId + 1) mod executor.workers.len
-      
+
+proc createWorker*(id: int, parent: Executor): Worker =
+  result = cast[Worker](allocShared0(sizeof(WorkerObj)))
+  result.id = id
+  result.channel.open()
+  result.parent = parent
+  createThread(result.thread, workerLoop, result)
+
 proc createExecutor*(workers: int): Executor =
   result = cast[Executor](allocShared0(sizeof(ExecutorObj)))
   result.workers = @[]
@@ -53,6 +56,3 @@ proc createExecutor*(workers: int): Executor =
     let w = createWorker(i, result) 
     result.workers.add(w)
   createThread(result.thread, executorLoop, result)
-
-proc join*(executor: Executor) =
-  executor.thread.joinThread()
