@@ -1,4 +1,4 @@
-import nimoypkg/tasks
+import nimoy/tasks
 
 proc ciao() =
   stdout.writeLine "ciao"
@@ -8,7 +8,7 @@ proc salut() =
   stdout.writeLine "salut"
 
 proc main() =
-  var executor = createExecutor()
+  var executor = createExecutor(2)
 
   executor.submit(Task(ciao))
   executor.submit(Task(hello))

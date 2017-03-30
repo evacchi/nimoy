@@ -35,42 +35,37 @@ proc workerLoop(worker: Worker) {.gcsafe.} =
 
 
 proc createWorker*(id: int): Worker =
-  let w = cast[Worker](allocShared0(sizeof(WorkerObj)))
-  w.id = id
-  w.channel.open()
-  createThread(w.thread, workerLoop, w)
-  w
+  result = cast[Worker](allocShared0(sizeof(WorkerObj)))
+  result.id = id
+  result.channel.open()
+  createThread(result.thread, workerLoop, result)
 
 proc submit*(worker: Worker, task: Task) =
   echo "task submitted to worker"
-  worker[].channel.send(task)
+  worker.channel.send(task)
 
 
 proc executorLoop(executor: Executor) {.gcsafe.} =
   echo "executor has started"
-
   while true:
     let (hasTask, t) = executor.channel.tryRecv()
     var workerId = 0
     if (hasTask):
       echo "executor got new task"
       executor.workers[workerId].submit(t)
-      inc workerId
-      workerId = workerId mod executor.workers.len
+      workerId = (workerId + 1) mod executor.workers.len
       
 proc createExecutor*(workers: int): Executor =
-  let e = cast[Executor](allocShared0(sizeof(ExecutorObj)))
-  e.workers = @[]
-  e.channel.open()
+  result = cast[Executor](allocShared0(sizeof(ExecutorObj)))
+  result.workers = @[]
+  result.channel.open()
   for i in 0..<workers:
-    echo i
-    e.workers.add(createWorker(i))
-  createThread(e.thread, executorLoop, e)
-  e
+    result.workers.add(createWorker(i))
+  createThread(result.thread, executorLoop, result)
 
 proc submit*(executor: Executor, task: Task) =
   echo "task submitted"
-  executor[].channel.send(task)
+  executor.channel.send(task)
 
 
 proc join*(executor: Executor) =
