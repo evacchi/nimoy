@@ -30,7 +30,7 @@ proc submit*(worker: Worker, task: Task) =
 proc submit*(executor: Executor, task: Task) =
   executor.channel.send(task)
 
-proc simpleWorker(self: Worker) {.thread.} =
+proc simpleWorker*(self: Worker) {.thread.} =
   while true:
     # poll for task
     let (hasTask, t) = self.channel.tryRecv()
@@ -39,7 +39,7 @@ proc simpleWorker(self: Worker) {.thread.} =
       # return back to the parent for rescheduling
       self.parent.submit(t)
 
-proc simpleExecutor(executor: Executor) {.thread.} =
+proc simpleExecutor*(executor: Executor) {.thread.} =
   echo "executor has started"
   var workerId = 0
   while true:
