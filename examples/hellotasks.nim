@@ -8,7 +8,7 @@ proc salut() =
   stdout.writeLine "salut"
 
 proc main() =
-  var executor = createExecutor(2)
+  var executor = createSimpleExecutor(2)
 
   executor.submit(Task(ciao))
   executor.submit(Task(hello))
