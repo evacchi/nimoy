@@ -1,4 +1,4 @@
-#  <img align=right src="img/nimoy.png" alt="Nimoy Icon" /> Nimoy
+# Nimoy <img align=right src="img/nimoy.png" alt="(Icon)" />
 
 An experimental minimal actor library for Nim.
 
@@ -21,3 +21,10 @@ pong.send(Envelope[int](message: 1, sender: ping))
 # wait
 system.join()
 ```
+
+## Features
+
+- [Actor behavior hot-swapping](examples/become.nim)
+- [Child actor spawning](examples/spawn.nim)
+- [Pluggable execution strategies](src/nimoy/tasks.nim)
+
