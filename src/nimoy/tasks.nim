@@ -13,7 +13,7 @@ type
   Worker = ptr WorkerObj
 
   ExecutorObj* = object
-    workers: array[2, Worker]
+    workers: seq[Worker]
     channel: Channel[Task]
     thread:  Thread[Executor]
 
@@ -48,25 +48,23 @@ proc submit*(worker: Worker, task: Task) =
 
 proc executorLoop(executor: Executor) {.gcsafe.} =
   echo "executor has started"
-  var tasks: seq[Task] = @[]
-  var counter = 0
-  var w1 = createWorker(1)
-  var w2 = createWorker(2)
 
   while true:
-    let (hasTask, t) = executor[].channel.tryRecv()
+    let (hasTask, t) = executor.channel.tryRecv()
+    var workerId = 0
     if (hasTask):
       echo "executor got new task"
-      if counter mod 2 == 0:
-        w1.submit(t)
-      else:
-        w2.submit(t)
-      inc counter
-
-
-proc createExecutor*(): Executor =
+      executor.workers[workerId].submit(t)
+      inc workerId
+      workerId = workerId mod executor.workers.len
+      
+proc createExecutor*(workers: int): Executor =
   let e = cast[Executor](allocShared0(sizeof(ExecutorObj)))
+  e.workers = @[]
   e.channel.open()
+  for i in 0..<workers:
+    echo i
+    e.workers.add(createWorker(i))
   createThread(e.thread, executorLoop, e)
   e
 

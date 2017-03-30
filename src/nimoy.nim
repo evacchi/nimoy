@@ -58,7 +58,7 @@ proc toTask*[A](actorRef: ActorRef[A]): Task =
       actor.behavior(actorRef, msg)
 
 proc createActorSystem*(): ActorSystem =
-  result.executor = createExecutor()
+  result.executor = createExecutor(2)
 
 proc join*(system: ActorSystem) =
   system.executor.join()
