@@ -28,3 +28,5 @@ system.join()
 - [Child actor spawning](examples/spawn.nim)
 - [Pluggable execution strategies](src/nimoy/tasks.nim)
 
+### Acknowledgements
+Name is courtesy of @mfirry
