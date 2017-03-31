@@ -58,7 +58,7 @@ proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   actorRef
 
 proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
-  createActor[A] do (self: ActorRef[int]):
+  createActor[A] do (self: ActorRef[A]):
     self.become(receive)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
