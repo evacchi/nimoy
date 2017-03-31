@@ -1,18 +1,38 @@
 type
-  Task* = proc() {.gcsafe.}
+
+  Task* = proc(): TaskState {.gcsafe.}
+  TaskState* = enum
+    taskStarted
+    taskContinue
+    taskFinished
+
+  ExecutorTask* = object
+    task: Task
+    state: TaskState
 
   WorkerId* = int
   WorkerObj* = object
     id:      WorkerId
-    channel: Channel[Task]
+    channel: Channel[ExecutorTask]
     thread:  Thread[Worker]
     parent:  Executor
   Worker = ptr WorkerObj
   WorkerLoop = proc(self: Worker) {.thread.}
 
+  ExecutorCommandKind = enum
+    eckShutdown
+    eckSubmit
+  
+  ExecutorCommand = object
+    case kind: ExecutorCommandKind
+    of eckSubmit: 
+      task: ExecutorTask
+    of eckShutdown:
+      discard
+
   ExecutorObj* = object
     workers: seq[Worker]
-    channel: Channel[Task]
+    channel: Channel[ExecutorCommand]
     thread:  Thread[Executor]
   Executor* = ptr ExecutorObj
   ExecutorLoop = proc(self: Executor) {.thread.}
@@ -21,34 +41,50 @@ type
     executorLoop: ExecutorLoop
     workerLoop: WorkerLoop
 
+proc toExecutorTask*(task: Task): ExecutorTask =
+  ExecutorTask(task: task, state: taskStarted)
+
 proc join*(executor: Executor) =
   executor.thread.joinThread()
 
-proc submit*(worker: Worker, task: Task) =
+proc submit*(worker: Worker, task: ExecutorTask) =
   worker.channel.send(task)
 
+proc submit(executor: Executor, task: ExecutorTask) =
+  executor.channel.send(ExecutorCommand(kind: eckSubmit, task: task))
+
 proc submit*(executor: Executor, task: Task) =
-  executor.channel.send(task)
+  executor.submit(task.toExecutorTask)
+
+proc shutdown*(executor: Executor) =
+  executor.channel.send(ExecutorCommand(kind: eckShutdown))
+
 
 proc simpleWorker*(self: Worker) {.thread.} =
   while true:
     # poll for task
     let (hasTask, t) = self.channel.tryRecv()
     if (hasTask):
-      t()
-      # return back to the parent for rescheduling
-      self.parent.submit(t)
+      let result = t.task()
+      case result 
+        of taskStarted, taskContinue:
+          # return back to the parent for rescheduling
+          self.parent.submit(t)
+        of taskFinished:
+          discard  
 
 proc simpleExecutor*(executor: Executor) {.thread.} =
   echo "executor has started"
   var workerId = 0
   while true:
     # poll for task
-    let (hasTask, t) = executor.channel.tryRecv()
-    if (hasTask):
-      # submit to next worker
-      executor.workers[workerId].submit(t)
+    let command = executor.channel.recv()
+    case command.kind
+    of eckSubmit:
+      executor.workers[workerId].submit(command.task)
       workerId = (workerId + 1) mod executor.workers.len
+    of eckShutdown:
+      break
 
 proc createWorker*(id: int, workerLoop: WorkerLoop, parent: Executor): Worker =
   result = cast[Worker](allocShared0(sizeof(WorkerObj)))

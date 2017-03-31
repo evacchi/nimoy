@@ -51,11 +51,12 @@ proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
     self.become(receive)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
-  return proc() {.gcsafe.} =
+  return proc(): TaskState {.gcsafe.} =
     let actor = cast[Actor[A]](actorRef)
     let (hasMsg, msg) = actor.mailbox.tryRecv()
     if hasMsg:
       actor.behavior(actorRef, msg)
+    taskContinue
 
 proc createActorSystem*(executor: Executor): ActorSystem =
   result.executor = executor
