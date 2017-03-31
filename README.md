@@ -29,4 +29,4 @@ system.join()
 - [Pluggable execution strategies](src/nimoy/tasks.nim)
 
 ### Acknowledgements
-Name is courtesy of @mfirry
+Name is courtesy of @mfirry, logo design by @joevanard
