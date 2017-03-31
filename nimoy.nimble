@@ -41,6 +41,16 @@ task spawn, "compile spawn":
   --path: "src"
   setCommand "c", "examples/spawn.nim"
 
+task kill, "compile kill":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/kill.nim"
+
 task hellotasks, "compile hellotasks":
   --hints: off
   --threads:on

@@ -1,6 +1,7 @@
 .vscode
 nimcache/
-pingpong
-hellotasks
-become
-spawn
+
+# ignore everything in examples
+examples/*
+# unless it ends with .nim
+!examples/*.nim

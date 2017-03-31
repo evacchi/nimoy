@@ -2,12 +2,16 @@ import nimoy/tasks
 
 type
   ActorObj*[A] = object
+    sysbox: Channel[SystemMessage]
     mailbox: Channel[Envelope[A]]
     behavior: ActorBehavior[A]
 
   Actor*[A] = ptr ActorObj[A]
   ActorRef*[A] = distinct pointer
 
+  SystemMessage* = enum
+    sysKill
+    
   Envelope*[A] = object
     message*:  A
     sender*:   ActorRef[A]
@@ -20,7 +24,7 @@ type
 
 
 proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
-  writeLine(stdout, "Unitialized actor could not handle message ", envelope)
+  echo "Unitialized actor could not handle message ", envelope
 
 proc send*[A](self: ActorRef[A], message: A, receiver: ActorRef[A]) =
   let e = Envelope(
@@ -38,8 +42,15 @@ proc send*[A](actor: ActorRef[A], envelope: Envelope[A]) =
 proc send*[A](actor: Actor[A], envelope: Envelope[A]) =
   actor.mailbox.send(envelope)
 
+proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
+  actor.sysbox.send(sysMessage)
+
+proc send*[A](actor: ActorRef[A], sysMessage: SystemMessage) =
+  cast[Actor[A]](actor).sysbox.send(sysMessage)
+
 proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
+  actor.sysbox.open()
   actor.mailbox.open()
   actor.behavior = nop
   let actorRef = cast[ActorRef[A]](actor)
@@ -53,10 +64,16 @@ proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
 proc toTask*[A](actorRef: ActorRef[A]): Task =
   return proc(): TaskState {.gcsafe.} =
     let actor = cast[Actor[A]](actorRef)
-    let (hasMsg, msg) = actor.mailbox.tryRecv()
-    if hasMsg:
-      actor.behavior(actorRef, msg)
-    taskContinue
+    let (hasSysMsg, sysMsg) = actor.sysbox.tryRecv()
+    if hasSysMsg:
+      case sysMsg
+      of sysKill:
+        taskFinished
+    else:
+      let (hasMsg, msg) = actor.mailbox.tryRecv()
+      if hasMsg:
+        actor.behavior(actorRef, msg)
+      taskContinue
 
 proc createActorSystem*(executor: Executor): ActorSystem =
   result.executor = executor
