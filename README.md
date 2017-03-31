@@ -68,6 +68,7 @@ system.join()
 ## More Features
 
 - [Child actor spawning](examples/spawn.nim)
+- [Killing actors](examples/kill.nim)
 - [Pluggable execution strategies](src/nimoy/tasks.nim)
 - More to come...
 
