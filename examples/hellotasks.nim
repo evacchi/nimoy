@@ -1,4 +1,4 @@
-import nimoy/tasks
+import nimoy/tasks, nimoy/executors
 
 proc ciao(): TaskStatus =
   echo "ciao"

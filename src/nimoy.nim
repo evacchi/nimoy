@@ -1,4 +1,4 @@
-import nimoy/tasks
+import nimoy/tasks, nimoy/executors
 
 type
   ActorObj*[A] = object
