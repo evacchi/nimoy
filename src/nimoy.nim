@@ -2,9 +2,12 @@ import nimoy/tasks
 
 type
   ActorObj*[A] = object
+    system: ActorSystem[A]
+    parent: ActorRef[A]
     sysbox: Channel[SystemMessage]
     mailbox: Channel[Envelope[A]]
     behavior: ActorBehavior[A]
+    children: seq[ActorRef[A]]
 
   Actor*[A] = ptr ActorObj[A]
   ActorRef*[A] = distinct pointer
@@ -19,9 +22,9 @@ type
   ActorBehavior*[A] =
     proc(context: ActorRef[A], envelope: Envelope[A])
 
-  ActorSystem = object
+  ActorSystem[A] = object
     executor: Executor
-
+    children: seq[ActorRef[A]]
 
 proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
   echo "Unitialized actor could not handle message ", envelope
@@ -48,18 +51,36 @@ proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
 proc send*[A](actor: ActorRef[A], sysMessage: SystemMessage) =
   cast[Actor[A]](actor).sysbox.send(sysMessage)
 
-proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
+proc system[A](actorRef: ActorRef[A]): ActorSystem[A] =
+  cast[Actor[A]](actorRef).system
+
+proc parent[A](actorRef: ActorRef[A]): ActorRef[A] =
+  cast[Actor[A]](actorRef).parent
+
+proc allocActor[A](system: ActorSystem[A], parent: ActorRef[A], init: proc(self: ActorRef[A])): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.sysbox.open()
   actor.mailbox.open()
+  actor.children = @[]
   actor.behavior = nop
-  let actorRef = cast[ActorRef[A]](actor)
-  init(actorRef)
-  actorRef
+  actor.system = system
+  actor.parent = parent
+  if cast[pointer](parent) != nil:
+    cast[Actor[A]](parent).children.add(result)
 
-proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
-  createActor[A] do (self: ActorRef[A]):
-    self.become(receive)
+  result = cast[ActorRef[A]](actor)
+  init(result)
+
+proc createActor*[A](parent: ActorRef[A], init: proc(self: ActorRef[A])): ActorRef[A] =
+  result = allocActor[A](system = parent.system, parent = parent, init = init)
+  let task = result.toTask
+  parent.system.executor.submit(task)
+
+proc createActor*[A](parent: ActorRef[A], receive: ActorBehavior[A]): ActorRef[A] =
+    result = createActor[A](system = parent.system, parent = parent) do (self: ActorRef[A]):
+               self.become(receive)
+    
+
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
   return proc(): TaskState {.gcsafe.} =
@@ -75,23 +96,25 @@ proc toTask*[A](actorRef: ActorRef[A]): Task =
         actor.behavior(actorRef, msg)
       taskContinue
 
-proc createActorSystem*(executor: Executor): ActorSystem =
+proc createActorSystem*[A](executor: Executor): ActorSystem[A] =
   result.executor = executor
+  result.children = @[]
+
   
-proc createActorSystem*(): ActorSystem =
-  createActorSystem(createSimpleExecutor(2))
+proc createActorSystem*[A](): ActorSystem[A] =
+  createActorSystem[A](createSimpleExecutor(2))
 
 proc join*(system: ActorSystem) =
   system.executor.join()
 
-proc createActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
-  let actorRef = createActor[A](init)
+proc createActor*[A](system: ActorSystem[A], init: proc(self: ActorRef[A])): ActorRef[A] =
+  let actorRef = allocActor[A](system, nil, init)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
 
-proc createActor*[A](system: ActorSystem, receive: ActorBehavior[A]): ActorRef[A] =
-  let actorRef = createActor[A](receive)
-  let task = actorRef.toTask
-  system.executor.submit(task)
-  actorRef
+proc createActor*[A](system: ActorSystem[A], receive: ActorBehavior[A]): ActorRef[A] =
+  createActor[A](system, 
+    proc (self: ActorRef[A]) =
+      self.become(receive))
+

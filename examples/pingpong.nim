@@ -1,6 +1,6 @@
 import nimoy
 
-let system = createActorSystem()
+let system = createActorSystem[int]()
 
 let ping = system.createActor() do (self: ActorRef[int], e: Envelope[int]):
   echo "ping has received ", e.message
