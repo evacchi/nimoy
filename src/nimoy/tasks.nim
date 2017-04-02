@@ -7,7 +7,6 @@ type
     taskFinished
 
   ExecutorTask* = object
-    taskId: int
     task: Task
     state: TaskState
 
@@ -39,7 +38,6 @@ type
     esShutdown
 
   ExecutorObj* = object
-    tasks: seq[ExecutorTask]
     workers: seq[Worker]
     channel: Channel[ExecutorCommand]
     thread:  Thread[Executor]
@@ -86,34 +84,29 @@ proc simpleWorker*(self: Worker) {.thread.} =
 proc simpleExecutor*(executor: Executor) {.thread.} =
   echo "executor has started"
   var workerId = 0
-  var taskId = 0
-  var allTasksRunning = true
-  var tasks: seq[ExecutorTask] = @[] 
-  while allTasksRunning:
+  var runningTasks = 0
+  while true:
     # wait for task
     var command = executor.channel.recv()
     case command.kind
     of eckSubmit:
       if executor.state != esShutdown:
         var task = command.submittedTask
-        task.taskId = taskId
-        tasks.add(task)
+        inc runningTasks
         executor.workers[workerId].submit(task)
         workerId = (workerId + 1) mod executor.workers.len
-        taskId += 1
     of eckReschedule:
-      for i in 0..<tasks.len:
-        if tasks[i].taskId == command.scheduledTask.taskId:
-          tasks[i].state = command.scheduledTask.state
-      if command.scheduledTask.state != taskFinished:
+      if command.scheduledTask.state == taskFinished:
+        dec runningTasks
+      else:
         executor.workers[workerId].submit(command.scheduledTask)
         workerId = (workerId + 1) mod executor.workers.len
     of eckShutdown:
       executor.state = esShutdown
 
-    for t in tasks:
-      allTasksRunning = t.state != taskFinished and allTasksRunning
-
+    if runningTasks <= 0:
+      break
+    
 proc createWorker*(id: int, workerLoop: WorkerLoop, parent: Executor): Worker =
   result = cast[Worker](allocShared0(sizeof(WorkerObj)))
   result.id = id
@@ -124,7 +117,6 @@ proc createWorker*(id: int, workerLoop: WorkerLoop, parent: Executor): Worker =
 proc createExecutor*(workers: int, executorStrategy: ExecutorStrategy): Executor =
   result = cast[Executor](allocShared0(sizeof(ExecutorObj)))
   result.workers = @[]
-  result.tasks = @[]
   result.channel.open()
   result.state = esWorking
   for i in 0..<workers:
