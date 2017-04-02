@@ -7,6 +7,7 @@ type
     taskFinished
 
   ExecutorTask* = object
+    taskId: int
     task: Task
     state: TaskState
 
@@ -22,18 +23,27 @@ type
   ExecutorCommandKind = enum
     eckShutdown
     eckSubmit
+    eckReschedule
   
   ExecutorCommand = object
     case kind: ExecutorCommandKind
     of eckSubmit: 
-      task: ExecutorTask
+      submittedTask: ExecutorTask
+    of eckReschedule: 
+      scheduledTask: ExecutorTask
     of eckShutdown:
       discard
 
+  ExecutorState = enum
+    esWorking
+    esShutdown
+
   ExecutorObj* = object
+    tasks: seq[ExecutorTask]
     workers: seq[Worker]
     channel: Channel[ExecutorCommand]
     thread:  Thread[Executor]
+    state:   ExecutorState
   Executor* = ptr ExecutorObj
   ExecutorLoop = proc(self: Executor) {.thread.}
 
@@ -50,8 +60,11 @@ proc join*(executor: Executor) =
 proc submit*(worker: Worker, task: ExecutorTask) =
   worker.channel.send(task)
 
+proc reschedule(executor: Executor, task: ExecutorTask) =
+  executor.channel.send(ExecutorCommand(kind: eckReschedule, scheduledTask: task))
+
 proc submit(executor: Executor, task: ExecutorTask) =
-  executor.channel.send(ExecutorCommand(kind: eckSubmit, task: task))
+  executor.channel.send(ExecutorCommand(kind: eckSubmit, submittedTask: task))
 
 proc submit*(executor: Executor, task: Task) =
   executor.submit(task.toExecutorTask)
@@ -63,28 +76,43 @@ proc shutdown*(executor: Executor) =
 proc simpleWorker*(self: Worker) {.thread.} =
   while true:
     # poll for task
-    let (hasTask, t) = self.channel.tryRecv()
+    var (hasTask, t) = self.channel.tryRecv()
     if (hasTask):
       let result = t.task()
-      case result 
-        of taskStarted, taskContinue:
-          # return back to the parent for rescheduling
-          self.parent.submit(t)
-        of taskFinished:
-          discard  
-
+      t.state = result
+      # return back to the parent for rescheduling
+      self.parent.reschedule(t)
+      
 proc simpleExecutor*(executor: Executor) {.thread.} =
   echo "executor has started"
   var workerId = 0
-  while true:
-    # poll for task
-    let command = executor.channel.recv()
+  var taskId = 0
+  var allTasksRunning = true
+  var tasks: seq[ExecutorTask] = @[] 
+  while allTasksRunning:
+    # wait for task
+    var command = executor.channel.recv()
     case command.kind
     of eckSubmit:
-      executor.workers[workerId].submit(command.task)
-      workerId = (workerId + 1) mod executor.workers.len
+      if executor.state != esShutdown:
+        var task = command.submittedTask
+        task.taskId = taskId
+        tasks.add(task)
+        executor.workers[workerId].submit(task)
+        workerId = (workerId + 1) mod executor.workers.len
+        taskId += 1
+    of eckReschedule:
+      for i in 0..<tasks.len:
+        if tasks[i].taskId == command.scheduledTask.taskId:
+          tasks[i].state = command.scheduledTask.state
+      if command.scheduledTask.state != taskFinished:
+        executor.workers[workerId].submit(command.scheduledTask)
+        workerId = (workerId + 1) mod executor.workers.len
     of eckShutdown:
-      break
+      executor.state = esShutdown
+
+    for t in tasks:
+      allTasksRunning = t.state != taskFinished and allTasksRunning
 
 proc createWorker*(id: int, workerLoop: WorkerLoop, parent: Executor): Worker =
   result = cast[Worker](allocShared0(sizeof(WorkerObj)))
@@ -96,7 +124,9 @@ proc createWorker*(id: int, workerLoop: WorkerLoop, parent: Executor): Worker =
 proc createExecutor*(workers: int, executorStrategy: ExecutorStrategy): Executor =
   result = cast[Executor](allocShared0(sizeof(ExecutorObj)))
   result.workers = @[]
+  result.tasks = @[]
   result.channel.open()
+  result.state = esWorking
   for i in 0..<workers:
     let w = createWorker(i, executorStrategy.workerLoop, result) 
     result.workers.add(w)
