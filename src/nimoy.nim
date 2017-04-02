@@ -26,10 +26,10 @@ type
 proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
   echo "Unitialized actor could not handle message ", envelope
 
-proc send*[A](self: ActorRef[A], message: A, receiver: ActorRef[A]) =
+proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
   let e = Envelope(
     message: message,
-    sender: self
+    sender: sender
   )
   cast[Actor](receiver).mailbox.send(e)
 
@@ -62,7 +62,7 @@ proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
     self.become(receive)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
-  return proc(): TaskState {.gcsafe.} =
+  return proc(): TaskStatus {.gcsafe.} =
     let actor = cast[Actor[A]](actorRef)
     let (hasSysMsg, sysMsg) = actor.sysbox.tryRecv()
     if hasSysMsg:

@@ -1,14 +1,14 @@
 import nimoy/tasks
 
-proc ciao(): TaskState =
+proc ciao(): TaskStatus =
   echo "ciao"
   taskFinished
   
-proc hello(): TaskState =
+proc hello(): TaskStatus =
   echo "hello"
   taskFinished
 
-proc salut(): TaskState =
+proc salut(): TaskStatus =
   echo "salut"
   taskFinished
 

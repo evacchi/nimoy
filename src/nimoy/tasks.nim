@@ -1,14 +1,14 @@
 type
-
-  Task* = proc(): TaskState {.gcsafe.}
-  TaskState* = enum
+  
+  Task* = proc(): TaskStatus {.gcsafe.}
+  TaskStatus* = enum
     taskStarted
     taskContinue
     taskFinished
 
   ExecutorTask* = object
     task: Task
-    state: TaskState
+    status: TaskStatus
 
   WorkerId* = int
   WorkerObj* = object
@@ -22,13 +22,13 @@ type
   ExecutorCommandKind = enum
     eckShutdown
     eckSubmit
-    eckReschedule
+    eckTaskReturned
   
   ExecutorCommand = object
     case kind: ExecutorCommandKind
     of eckSubmit: 
       submittedTask: ExecutorTask
-    of eckReschedule: 
+    of eckTaskReturned: 
       scheduledTask: ExecutorTask
     of eckShutdown:
       discard
@@ -50,7 +50,7 @@ type
     workerLoop: WorkerLoop
 
 proc toExecutorTask*(task: Task): ExecutorTask =
-  ExecutorTask(task: task, state: taskStarted)
+  ExecutorTask(task: task, status: taskStarted)
 
 proc join*(executor: Executor) =
   executor.thread.joinThread()
@@ -58,8 +58,8 @@ proc join*(executor: Executor) =
 proc submit*(worker: Worker, task: ExecutorTask) =
   worker.channel.send(task)
 
-proc reschedule(executor: Executor, task: ExecutorTask) =
-  executor.channel.send(ExecutorCommand(kind: eckReschedule, scheduledTask: task))
+proc taskReturned(executor: Executor, task: ExecutorTask) =
+  executor.channel.send(ExecutorCommand(kind: eckTaskReturned, scheduledTask: task))
 
 proc submit(executor: Executor, task: ExecutorTask) =
   executor.channel.send(ExecutorCommand(kind: eckSubmit, submittedTask: task))
@@ -70,19 +70,14 @@ proc submit*(executor: Executor, task: Task) =
 proc shutdown*(executor: Executor) =
   executor.channel.send(ExecutorCommand(kind: eckShutdown))
 
-
 proc simpleWorker*(self: Worker) {.thread.} =
   while true:
-    # poll for task
-    var (hasTask, t) = self.channel.tryRecv()
-    if (hasTask):
-      let result = t.task()
-      t.state = result
-      # return back to the parent for rescheduling
-      self.parent.reschedule(t)
+    var t = self.channel.recv()
+    t.status = t.task()
+    # return back to the parent for rescheduling
+    self.parent.taskReturned(t)
       
 proc simpleExecutor*(executor: Executor) {.thread.} =
-  echo "executor has started"
   var workerId = 0
   var runningTasks = 0
   while true:
@@ -91,12 +86,11 @@ proc simpleExecutor*(executor: Executor) {.thread.} =
     case command.kind
     of eckSubmit:
       if executor.state != esShutdown:
-        var task = command.submittedTask
         inc runningTasks
-        executor.workers[workerId].submit(task)
+        executor.workers[workerId].submit(command.submittedTask)
         workerId = (workerId + 1) mod executor.workers.len
-    of eckReschedule:
-      if command.scheduledTask.state == taskFinished:
+    of eckTaskReturned:
+      if command.scheduledTask.status == taskFinished:
         dec runningTasks
       else:
         executor.workers[workerId].submit(command.scheduledTask)
