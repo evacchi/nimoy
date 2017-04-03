@@ -7,7 +7,8 @@ type
     behavior: ActorBehavior[A]
 
   Actor*[A] = ptr ActorObj[A]
-  ActorRef*[A] = distinct pointer
+  ActorRef*[A] = object
+    actor: Actor[A]
 
   SystemMessage* = enum
     sysKill
@@ -22,7 +23,6 @@ type
   ActorSystem = object
     executor: Executor
 
-
 proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
   echo "Unitialized actor could not handle message ", envelope
 
@@ -31,29 +31,29 @@ proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
     message: message,
     sender: sender
   )
-  cast[Actor](receiver).mailbox.send(e)
+  receiver.actor.mailbox.send(e)
 
-proc become*[A](actor: ActorRef[A], newBehavior: ActorBehavior[A]) =
-  cast[Actor[A]](actor).behavior = newBehavior
-
-proc send*[A](actor: ActorRef[A], envelope: Envelope[A]) =
-  cast[Actor[A]](actor).mailbox.send(envelope)
+proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
+  actorRef.actor.behavior = newBehavior
 
 proc send*[A](actor: Actor[A], envelope: Envelope[A]) =
   actor.mailbox.send(envelope)
 
+proc send*[A](actorRef: ActorRef[A], envelope: Envelope[A]) =
+  actorRef.actor.send(envelope)
+
 proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
   actor.sysbox.send(sysMessage)
 
-proc send*[A](actor: ActorRef[A], sysMessage: SystemMessage) =
-  cast[Actor[A]](actor).sysbox.send(sysMessage)
+proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
+  actorRef.actor.send(sysMessage)
 
 proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.sysbox.open()
   actor.mailbox.open()
   actor.behavior = nop
-  let actorRef = cast[ActorRef[A]](actor)
+  let actorRef = ActorRef[A](actor: actor)
   init(actorRef)
   actorRef
 
@@ -63,7 +63,7 @@ proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
   return proc(): TaskStatus {.gcsafe.} =
-    let actor = cast[Actor[A]](actorRef)
+    let actor = actorRef.actor
     let (hasSysMsg, sysMsg) = actor.sysbox.tryRecv()
     if hasSysMsg:
       case sysMsg

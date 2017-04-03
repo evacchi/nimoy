@@ -6,7 +6,11 @@ proc createSimpleExecutor*(workers: int): Executor =
       var t = self.channel.recv()
       t.status = t.task()
       # return back to the parent for rescheduling
-      self.parent.channel.send(ExecutorCommand(kind: executorTaskReturned, scheduledTask: t))
+      let command = 
+        ExecutorCommand(
+          kind: executorTaskReturned, 
+          scheduledTask: t)
+      self.parent.channel.send(command)
         
   proc executorLoop(executor: Executor) {.thread.} =
     var workerId = 0
