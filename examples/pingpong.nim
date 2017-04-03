@@ -1,4 +1,4 @@
-import nimoy
+import nimoy, os
 
 let system = createActorSystem()
 
@@ -14,4 +14,4 @@ let pong = system.createActor() do (self: ActorRef[int], e: Envelope[int]):
 pong.send(Envelope[int](message: 1, sender: ping))
 
 # wait
-system.join()
+system.awaitTermination(1)

@@ -20,6 +20,6 @@ proc main() =
   executor.submit(salut)
 
   executor.shutdown()
-  executor.join()
+  executor.awaitTermination()
 
 main()

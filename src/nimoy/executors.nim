@@ -32,6 +32,9 @@ proc createSimpleExecutor*(workers: int): Executor =
           workerId = (workerId + 1) mod executor.workers.len
       of executorShutdown:
         executor.status = executorShuttingdown
+      of executorTerminate:
+        executor.status = executorTerminated
+        break
 
       if runningTasks <= 0:
         break

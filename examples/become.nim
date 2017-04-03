@@ -30,4 +30,4 @@ let pong = system.createActor() do (self: ActorRef[int]):
 pong.send(Envelope[int](message: 1, sender: ping))
 
 # start the execution
-system.join()
+system.awaitTermination(1)

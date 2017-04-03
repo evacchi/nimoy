@@ -81,8 +81,12 @@ proc createActorSystem*(executor: Executor): ActorSystem =
 proc createActorSystem*(): ActorSystem =
   createActorSystem(createSimpleExecutor(2))
 
-proc join*(system: ActorSystem) =
-  system.executor.join()
+proc awaitTermination*(system: ActorSystem) =
+  system.executor.awaitTermination()
+
+proc awaitTermination*(system: ActorSystem, maxSeconds: float) =
+  system.executor.awaitTermination(maxSeconds)
+
 
 proc createActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
   let actorRef = createActor[A](init)
