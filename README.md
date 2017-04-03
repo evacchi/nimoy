@@ -69,7 +69,7 @@ system.awaitTermination(1)
 
 - [Child actor spawning](examples/spawn.nim)
 - [Killing actors](examples/kill.nim)
-- [Pluggable execution strategies](src/nimoy/tasks.nim)
+- [Pluggable execution strategies](src/nimoy/executors.nim)
 - More to come...
 
 ### Acknowledgements
