@@ -22,8 +22,8 @@ let pong = system.createActor() do (self: ActorRef[int], e: Envelope[int]):
 # kick it off
 pong.send(Envelope[int](message: 1, sender: ping))
 
-# wait
-system.join()
+# wait up to 1 second
+system.awaitTermination(1)
 ```
 
 #### [Behavior Hotswapping](examples/become.nim)
@@ -60,8 +60,8 @@ let pong = system.createActor() do (self: ActorRef[int]):
 # kick it off
 pong.send(Envelope[int](message: 1, sender: ping))
 
-# start the execution
-system.join()
+# wait up to 1 second
+system.awaitTermination(1)
 ```
 
 
