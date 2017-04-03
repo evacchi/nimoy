@@ -3,7 +3,7 @@
 version       = "0.1.0"
 author        = "Edoardo Vacchi"
 description   = "Minimal experimental nim actor implementation"
-license       = "MIT"
+license       = "Apache2"
 
 # Dependencies
 
