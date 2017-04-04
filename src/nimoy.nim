@@ -20,7 +20,7 @@ type
   ActorBehavior*[A] =
     proc(context: ActorRef[A], envelope: Envelope[A])
 
-  ActorSystem = object
+  ActorSystem* = object
     executor: Executor
 
 proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =

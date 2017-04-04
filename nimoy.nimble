@@ -51,6 +51,16 @@ task kill, "compile kill":
   --path: "src"
   setCommand "c", "examples/kill.nim"
 
+task topology, "compile topology":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/topology.nim"
+
 task hellotasks, "compile hellotasks":
   --hints: off
   --threads:on
