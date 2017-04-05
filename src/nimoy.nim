@@ -3,7 +3,7 @@ import nimoy/tasks, nimoy/executors
 type
   ActorObj*[A] = object
     sysbox: Channel[SystemMessage]
-    mailbox: Channel[Envelope[A,any]]
+    mailbox: Channel[A]
     behavior: ActorBehavior[A]
 
   Actor*[A] = ptr ActorObj[A]
@@ -13,18 +13,18 @@ type
   SystemMessage* = enum
     sysKill
     
-  Envelope*[A,B] = object
+  Envelope*[A] = object
     message*:  A
-    sender*:   ActorRef[B]
+    sender*:   ActorRef[A]
 
-  ActorBehavior*[A,B] =
-    proc(self: ActorRef[A], envelope: Envelope[A])
+  ActorBehavior*[A] =
+    proc(context: ActorRef[A], message: A)
 
-  ActorSystem* = object
+  ActorSystem = object
     executor: Executor
 
-proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
-  echo "Unitialized actor could not handle message ", envelope
+proc nop*[A](self: ActorRef[A], message: A) =
+  echo "Unitialized actor could not handle message ", message
 
 proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
   let e = Envelope(
@@ -33,23 +33,23 @@ proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
   )
   receiver.actor.mailbox.send(e)
 
-proc become*[A,B](actorRef: ActorRef[A], newBehavior: ActorBehavior[A,B]) =
+proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
   actorRef.actor.behavior = newBehavior
 
-proc send*[A,B](actor: Actor[A,B], envelope: Envelope[A]) =
-  actor.mailbox.send(envelope)
+proc send*[A](actor: Actor[A], message: A) =
+  actor.mailbox.send(message)
 
-proc send*[A](actorRef: ActorRef[A], envelope: Envelope[A]) =
-  actorRef.actor.send(envelope)
+proc send*[A](actorRef: ActorRef[A], message: A) =
+  actorRef.actor.send(message)
 
-proc send*[A,B](actor: Actor[A,B], sysMessage: SystemMessage) =
+proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
   actor.sysbox.send(sysMessage)
 
 proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
   actorRef.actor.send(sysMessage)
 
-proc createActor*[A,B](init: proc(self: ActorRef[A])): ActorRef[A] =
-  var actor = cast[Actor[A,B]](allocShared0(sizeof(ActorObj[A,B])))
+proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
+  var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.sysbox.open()
   actor.mailbox.open()
   actor.behavior = nop
@@ -57,8 +57,8 @@ proc createActor*[A,B](init: proc(self: ActorRef[A])): ActorRef[A] =
   init(actorRef)
   actorRef
 
-proc createActor*[A,B](receive: ActorBehavior[A,B]): ActorRef[A] =
-  createActor[A,B] do (self: ActorRef[A]):
+proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
+  createActor[A] do (self: ActorRef[A]):
     self.become(receive)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
@@ -88,14 +88,14 @@ proc awaitTermination*(system: ActorSystem, maxSeconds: float) =
   system.executor.awaitTermination(maxSeconds)
 
 
-proc createActor*[A,B](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
-  let actorRef = createActor[A,B](init)
+proc createActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
+  let actorRef = createActor[A](init)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
 
-proc createActor*[A,B](system: ActorSystem, receive: ActorBehavior[A,B]): ActorRef[A] =
-  let actorRef = createActor[A,B](receive)
+proc createActor*[A](system: ActorSystem, receive: ActorBehavior[A]): ActorRef[A] =
+  let actorRef = createActor[A](receive)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
