@@ -10,17 +10,21 @@ An experimental minimal actor library for Nim.
 import nimoy
 
 type
-  Ping = object
+  # you can Ping someone that will Pong back
+  Ping = object 
     sender: ActorRef[Pong]
+  # you can Pong someone that will Ping back
   Pong = object
     sender: ActorRef[Ping]
 
 let system = createActorSystem()
 
+# a ping actor expects Pings, replies with Pongs
 let ping = system.createActor() do (self: ActorRef[Ping], m: Ping):
   echo "ping received from ", m.sender
   m.sender.send(Pong(sender: self))
 
+# a pong actor expects Pongs, replies with Pings
 let pong = system.createActor() do (self: ActorRef[Pong], m: Pong):
   echo "pong received from ", m.sender
   m.sender.send(Ping(sender: self))
@@ -37,34 +41,39 @@ system.awaitTermination(1)
 ```nim
 import nimoy
 
+type
+  IntMessage = object
+    value: int
+    sender: ActorRef[IntMessage]
+
 let system = createActorSystem()
 
 # ping receives at least 10 msgs then becomes "done"
-let ping = system.createActor() do (self: ActorRef[int]):
+let ping = system.createActor() do (self: ActorRef[IntMessage]):
   var count = 0
-  proc done(self: ActorRef[int], e: Envelope[int]) =
+  proc done(self: ActorRef[IntMessage], m: IntMessage) =
     echo "DISCARD."
 
-  proc receive(self: ActorRef[int], e: Envelope[int]) =
-    echo "ping has received ", e.message
-    e.sender.send(Envelope[int](message: e.message + 1, sender: self))
+  proc receive(self: ActorRef[IntMessage], m: IntMessage) =
+    echo "ping has received ", m.value
+    m.sender.send(IntMessage(value: m.value + 1, sender: self))
     count += 1
     if count >= 10:
       self.become(done)
 
-  self.become(ActorBehavior[int](receive))
+  self.become(receive)
 
 # pong responds to ping
-let pong = system.createActor() do (self: ActorRef[int]):
-  proc receive(self: ActorRef[int], e: Envelope[int]) =
-    echo "pong has received ", e.message
-    e.sender.send(Envelope[int](message: e.message + 1, sender: self))
+let pong = system.createActor() do (self: ActorRef[IntMessage]):
+  proc receive(self: ActorRef[IntMessage], m: IntMessage) =
+    echo "pong has received ", m.value
+    m.sender.send(IntMessage(value: m.value + 1, sender: self))
 
   self.become(receive)
 
 
 # kick it off
-pong.send(Envelope[int](message: 1, sender: ping))
+pong.send(IntMessage(value: 1, sender: ping))
 
 # wait up to 1 second
 system.awaitTermination(1)
