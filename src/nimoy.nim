@@ -3,7 +3,7 @@ import nimoy/tasks, nimoy/executors
 type
   ActorObj*[A] = object
     sysbox: Channel[SystemMessage]
-    mailbox: Channel[Envelope[A]]
+    mailbox: Channel[Envelope[A,any]]
     behavior: ActorBehavior[A]
 
   Actor*[A] = ptr ActorObj[A]
@@ -13,12 +13,12 @@ type
   SystemMessage* = enum
     sysKill
     
-  Envelope*[A] = object
+  Envelope*[A,B] = object
     message*:  A
-    sender*:   ActorRef[A]
+    sender*:   ActorRef[B]
 
-  ActorBehavior*[A] =
-    proc(context: ActorRef[A], envelope: Envelope[A])
+  ActorBehavior*[A,B] =
+    proc(self: ActorRef[A], envelope: Envelope[A])
 
   ActorSystem* = object
     executor: Executor
@@ -33,23 +33,23 @@ proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
   )
   receiver.actor.mailbox.send(e)
 
-proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
+proc become*[A,B](actorRef: ActorRef[A], newBehavior: ActorBehavior[A,B]) =
   actorRef.actor.behavior = newBehavior
 
-proc send*[A](actor: Actor[A], envelope: Envelope[A]) =
+proc send*[A,B](actor: Actor[A,B], envelope: Envelope[A]) =
   actor.mailbox.send(envelope)
 
 proc send*[A](actorRef: ActorRef[A], envelope: Envelope[A]) =
   actorRef.actor.send(envelope)
 
-proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
+proc send*[A,B](actor: Actor[A,B], sysMessage: SystemMessage) =
   actor.sysbox.send(sysMessage)
 
 proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
   actorRef.actor.send(sysMessage)
 
-proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
-  var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
+proc createActor*[A,B](init: proc(self: ActorRef[A])): ActorRef[A] =
+  var actor = cast[Actor[A,B]](allocShared0(sizeof(ActorObj[A,B])))
   actor.sysbox.open()
   actor.mailbox.open()
   actor.behavior = nop
@@ -57,8 +57,8 @@ proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   init(actorRef)
   actorRef
 
-proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
-  createActor[A] do (self: ActorRef[A]):
+proc createActor*[A,B](receive: ActorBehavior[A,B]): ActorRef[A] =
+  createActor[A,B] do (self: ActorRef[A]):
     self.become(receive)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
@@ -88,14 +88,14 @@ proc awaitTermination*(system: ActorSystem, maxSeconds: float) =
   system.executor.awaitTermination(maxSeconds)
 
 
-proc createActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
-  let actorRef = createActor[A](init)
+proc createActor*[A,B](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
+  let actorRef = createActor[A,B](init)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
 
-proc createActor*[A](system: ActorSystem, receive: ActorBehavior[A]): ActorRef[A] =
-  let actorRef = createActor[A](receive)
+proc createActor*[A,B](system: ActorSystem, receive: ActorBehavior[A,B]): ActorRef[A] =
+  let actorRef = createActor[A,B](receive)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
