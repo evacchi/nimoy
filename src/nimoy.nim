@@ -3,7 +3,7 @@ import nimoy/tasks, nimoy/executors
 type
   ActorObj*[A] = object
     sysbox: Channel[SystemMessage]
-    mailbox: Channel[Envelope[A]]
+    mailbox: Channel[A]
     behavior: ActorBehavior[A]
 
   Actor*[A] = ptr ActorObj[A]
@@ -18,13 +18,13 @@ type
     sender*:   ActorRef[A]
 
   ActorBehavior*[A] =
-    proc(context: ActorRef[A], envelope: Envelope[A])
+    proc(context: ActorRef[A], message: A)
 
   ActorSystem = object
     executor: Executor
 
-proc nop*[A](self: ActorRef[A], envelope: Envelope[A]) =
-  echo "Unitialized actor could not handle message ", envelope
+proc nop*[A](self: ActorRef[A], message: A) =
+  echo "Unitialized actor could not handle message ", message
 
 proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
   let e = Envelope(
@@ -36,11 +36,11 @@ proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
 proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
   actorRef.actor.behavior = newBehavior
 
-proc send*[A](actor: Actor[A], envelope: Envelope[A]) =
-  actor.mailbox.send(envelope)
+proc send*[A](actor: Actor[A], message: A) =
+  actor.mailbox.send(message)
 
-proc send*[A](actorRef: ActorRef[A], envelope: Envelope[A]) =
-  actorRef.actor.send(envelope)
+proc send*[A](actorRef: ActorRef[A], message: A) =
+  actorRef.actor.send(message)
 
 proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
   actor.sysbox.send(sysMessage)

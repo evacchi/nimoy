@@ -1,33 +1,38 @@
 import nimoy
 
+type
+  IntMessage = object
+    value: int
+    sender: ActorRef[IntMessage]
+
 let system = createActorSystem()
 
 # ping receives at least 10 msgs then becomes "done"
-let ping = system.createActor() do (self: ActorRef[int]):
+let ping = system.createActor() do (self: ActorRef[IntMessage]):
   var count = 0
-  proc done(self: ActorRef[int], e: Envelope[int]) =
+  proc done(self: ActorRef[IntMessage], m: IntMessage) =
     echo "DISCARD."
 
-  proc receive(self: ActorRef[int], e: Envelope[int]) =
-    echo "ping has received ", e.message
-    e.sender.send(Envelope[int](message: e.message + 1, sender: self))
+  proc receive(self: ActorRef[IntMessage], m: IntMessage) =
+    echo "ping has received ", m.value
+    m.sender.send(IntMessage(value: m.value + 1, sender: self))
     count += 1
     if count >= 10:
       self.become(done)
 
-  self.become(ActorBehavior[int](receive))
+  self.become(receive)
 
 # pong responds to ping
-let pong = system.createActor() do (self: ActorRef[int]):
-  proc receive(self: ActorRef[int], e: Envelope[int]) =
-    echo "pong has received ", e.message
-    e.sender.send(Envelope[int](message: e.message + 1, sender: self))
+let pong = system.createActor() do (self: ActorRef[IntMessage]):
+  proc receive(self: ActorRef[IntMessage], m: IntMessage) =
+    echo "pong has received ", m.value
+    m.sender.send(IntMessage(value: m.value + 1, sender: self))
 
   self.become(receive)
 
 
 # kick it off
-pong.send(Envelope[int](message: 1, sender: ping))
+pong.send(IntMessage(value: 1, sender: ping))
 
-# start the execution
+# wait up to 1 second
 system.awaitTermination(1)
