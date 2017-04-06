@@ -51,6 +51,9 @@ proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
 proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
   actorRef.actor.send(sysMessage)
 
+template `!`*(receiver, message: untyped) =
+  receiver.send(message)
+
 proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.sysbox.open()

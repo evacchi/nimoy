@@ -3,7 +3,7 @@ import nimoy
 type
   IntMessage = object
     value: int
-    sender: ActorRef[IntMessage]
+    replyTo: ActorRef[IntMessage]
 
 let system = createActorSystem()
 
@@ -15,7 +15,7 @@ let ping = system.initActor() do (self: ActorRef[IntMessage]):
 
   proc receive(m: IntMessage) =
     echo "ping has received ", m.value
-    m.sender.send(IntMessage(value: m.value + 1, sender: self))
+    m.replyTo ! IntMessage(value: m.value + 1, replyTo: self)
     count += 1
     if count >= 10:
       self.become(done)
@@ -26,13 +26,13 @@ let ping = system.initActor() do (self: ActorRef[IntMessage]):
 let pong = system.initActor() do (self: ActorRef[IntMessage]):
   proc receive(m: IntMessage) =
     echo "pong has received ", m.value
-    m.sender.send(IntMessage(value: m.value + 1, sender: self))
+    m.replyTo ! IntMessage(value: m.value + 1, replyTo: self)
 
   self.become(receive)
 
 
 # kick it off
-pong.send(IntMessage(value: 1, sender: ping))
+pong ! IntMessage(value: 1, replyTo: ping)
 
 # wait up to 1 second
 system.awaitTermination(1)
