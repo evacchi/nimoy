@@ -8,28 +8,27 @@ type
 let system = createActorSystem()
 
 # ping receives at least 10 msgs then becomes "done"
-let ping = system.initActor() do (self: ActorRef[IntMessage]):
+let ping = system.initActor() do (self: ActorRef[IntMessage]) -> Effect[IntMessage]:
   var count = 0
-  proc done(m: IntMessage) =
+  proc done(m: IntMessage): Effect[IntMessage] =
     echo "DISCARD."
+    stay[IntMessage]()
 
-  proc receive(m: IntMessage) =
+  proc receive(m: IntMessage): Effect[IntMessage] =
     echo "ping has received ", m.value
     m.replyTo ! IntMessage(value: m.value + 1, replyTo: self)
     count += 1
     if count >= 10:
-      self.become(done)
+      become[IntMessage](done)
+    else:
+      stay[IntMessage]()
 
-  self.become(receive)
+  become[IntMessage](receive)
 
 # pong responds to ping
-let pong = system.initActor() do (self: ActorRef[IntMessage]):
-  proc receive(m: IntMessage) =
-    echo "pong has received ", m.value
-    m.replyTo ! IntMessage(value: m.value + 1, replyTo: self)
-
-  self.become(receive)
-
+let pong = system.createActor() do (self: ActorRef[IntMessage], m: IntMessage):
+  echo "pong has received ", m.value
+  m.replyTo ! IntMessage(value: m.value + 1, replyTo: self)
 
 # kick it off
 pong ! IntMessage(value: 1, replyTo: ping)
