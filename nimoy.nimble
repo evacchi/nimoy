@@ -8,55 +8,38 @@ license       = "Apache2"
 # Dependencies
 
 requires "nim >= 0.16.0"
-
 srcDir = "src"
 
+proc buildExample(example: string) =
+  echo "\nBuilding ", example, "..."
+  exec "nim c "           &
+       "--hints:off "     &
+       "--linedir:on "    &
+       "--stacktrace:on " &
+       "--linetrace:on "  &
+       "--debuginfo "     &
+       "--threads:on "    &
+       "--path:src examples/" & example & ".nim"
+
 task pingpong, "compile pingpong":
-  --hints: off
-  --threads:on
-  --linedir: on
-  --stacktrace: on
-  --linetrace: on
-  --debuginfo
-  --path: "src"
-  setCommand "c", "examples/pingpong.nim"
+  buildExample("pingpong")
 
 task become, "compile become":
-  --hints: off
-  --threads:on
-  --linedir: on
-  --stacktrace: on
-  --linetrace: on
-  --debuginfo
-  --path: "src"
-  setCommand "c", "examples/become.nim"
+  buildExample("become")
 
 task spawn, "compile spawn":
-  --hints: off
-  --threads:on
-  --linedir: on
-  --stacktrace: on
-  --linetrace: on
-  --debuginfo
-  --path: "src"
-  setCommand "c", "examples/spawn.nim"
-
+  buildExample("spawn")
+  
 task kill, "compile kill":
-  --hints: off
-  --threads:on
-  --linedir: on
-  --stacktrace: on
-  --linetrace: on
-  --debuginfo
-  --path: "src"
-  setCommand "c", "examples/kill.nim"
+  buildExample("kill")
 
 task hellotasks, "compile hellotasks":
-  --hints: off
-  --threads:on
-  --linedir: on
-  --stacktrace: on
-  --linetrace: on
-  --debuginfo
-  --path: "src"
-  setCommand "c", "examples/hellotasks.nim"
+  buildExample("hellotasks")
+
+task examples, "compile all the examples":
+  pingpongTask()
+  becomeTask()
+  spawnTask()
+  killTask()
+  hellotasksTask()
+  
