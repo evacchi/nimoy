@@ -17,7 +17,7 @@ type
     message*:  A
     sender*:   ActorRef[A]
 
-  ActorBehavior*[A] =
+  ActorBehavior*[A] = 
     proc(context: ActorRef[A], message: A)
 
   ActorSystem = object

@@ -1,22 +1,26 @@
 import nimoy, future
 
 type
-  ActorProto[A] =
+  Props[A] =
     proc(self: ActorRef[A])
 
   ActorNodeFactory[In, Out] =
-    proc(subscriber: ActorRef[Out]): ActorProto[Out]
+    proc(subscriber: ActorRef[Out]): Props[In]
   
   ActorNode[In, Out] = object
     factory: ActorNodeFactory[In, Out]
+
+  SourceCommand = enum
+    Next
   
-#   Edge[A,B] = tuple
-#     left: ActorNode[A]
-#     right: ActorNode[B]
+  Edge[In,X,Out] = tuple
+    left: ActorNode[In,X]
+    right: ActorNode[X,Out]  
 
 
-# proc `~>`[A,B](left: ActorNode[A], right: ActorNode[B]): Edge[A,B] =
-#   (left, right)
+
+proc `~>`[A,X,B](left: ActorNode[A,X], right: ActorNode[X,B]): Edge[A,X,B] =
+  (left, right)
 
 
 proc node[In,Out](factory: ActorNodeFactory[In,Out]): ActorNode[In,Out] =
@@ -24,41 +28,35 @@ proc node[In,Out](factory: ActorNodeFactory[In,Out]): ActorNode[In,Out] =
 
 let system = createActorSystem()
 
-let noSender = system.createActor do (self: ActorRef[void], e: Envelope[void]):
+let noSender = system.createActor do (self: ActorRef[int], m: int):
   discard
   
 proc mapNode[In,Out]( f: proc(x:In): Out ): ActorNode[In,Out] = 
   node[In,Out](
-    proc (subscriber: ActorRef[Out]): ActorProto[In] =
+    proc (subscriber: ActorRef[Out]): Props[In] =
       return proc(self: ActorRef[In]) =
-        self.become do (self: ActorRef[In], e: Envelope[In]):
-          subscriber.send(Envelope[Out](message: f(e.message), sender: self))
+        self.become do (self: ActorRef[In], inp: In):
+          subscriber.send(f(inp))
   )
 
-proc sinkNode[In]( f: proc(x:In) ): ActorNode[In,void] =
-  node[In,void](
-    proc (subscriber: ActorRef[void]): ActorProto[In] =
+proc sinkNode[In]( f: proc(x:In) ): ActorNode[In,int] =
+  node[In,int](
+    proc (subscriber: ActorRef[int]): Props[In] =
       return proc(self: ActorRef[In]) =
-        self.become do (self: ActorRef[In], e: Envelope[In]):
-          f(e.message)
+        self.become do (self: ActorRef[In], inp: In):
+          f(inp)
   )
 
 
-type 
-  Pull = void
-
-proc sourceNode[Out]( iter: iterator(): Out ): ActorNode[void,Out] =
-  node[void,Out](
-    proc (subscriber: ActorRef[Out]): ActorProto[void] =
-      return proc(self: ActorRef[void]) =
-        self.become do (self: ActorRef[void], e: Envelope[void]):
-          subscriber.send(Envelope[Out](message: iter(), sender: self))
+proc sourceNode[Out]( iter: iterator(): Out ): ActorNode[SourceCommand,Out] =
+  node[SourceCommand,Out](
+    proc (subscriber: ActorRef[Out]): Props[SourceCommand] =
+      return proc(self: ActorRef[SourceCommand]) =
+        self.become do (self: ActorRef[SourceCommand], e: SourceCommand):
+          subscriber.send(iter())
   )
 
-
-
-
-let src: ActorNode[void,int]  = sourceNode[int](
+let src: ActorNode[SourceCommand,int]  = sourceNode[int](
   iterator(): int = 
     for i in 0..10: 
       yield i 
@@ -74,7 +72,7 @@ let srcRef  = system.createActor(src.factory(map1Ref))
 
 # send a tick
 for i in 0..10:
-  srcRef.send(Envelope[void]())
+  srcRef.send(Next)
 
 
 # for i in 0..10:
