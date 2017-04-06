@@ -1,3 +1,7 @@
+.vscode
 nimcache/
-minactors
 
+# ignore everything in examples
+examples/*
+# unless it ends with .nim
+!examples/*.nim
