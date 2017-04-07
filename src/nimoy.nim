@@ -23,7 +23,7 @@ type
   ActorContextBehavior*[A] =
     proc(self: ActorRef[A], message: A)
 
-  ActorSystem = object
+  ActorSystem* = object
     executor: Executor
 
 proc nop*[A](message: A) =
