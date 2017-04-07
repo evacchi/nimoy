@@ -63,6 +63,9 @@ proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   init(actorRef)
   actorRef
 
+proc destroyActor*[A](actor: Actor[A]) =
+  deallocShared(actor)
+
 proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =    
   proc init(self: ActorRef[A]) =
     self.become(ActorBehavior[A](receive))
@@ -83,6 +86,7 @@ proc toTask*[A](actorRef: ActorRef[A]): Task =
     if hasSysMsg:
       case sysMsg
       of sysKill:
+        destroyActor(actorRef.actor)
         taskFinished
     else:
       let (hasMsg, msg) = actor.mailbox.tryRecv()
