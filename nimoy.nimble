@@ -36,10 +36,14 @@ task kill, "compile kill":
 task hellotasks, "compile hellotasks":
   buildExample("hellotasks")
 
+task loader, "compile loader":
+  buildExample("loader")
+
 task examples, "compile all the examples":
   pingpongTask()
   becomeTask()
   spawnTask()
   killTask()
   hellotasksTask()
+  loaderTask()
   
