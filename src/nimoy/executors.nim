@@ -1,6 +1,14 @@
-import tasks
+import tasks, tables, random
 
 proc createSimpleExecutor*(workers: int): Executor =
+  proc findFreeWorker(workerSet: var seq[bool]): int = 
+    # returns random if no worker is free
+    for workerId, isBusy in workerSet:
+      if not isBusy:
+        workerSet[workerId] = true 
+        return workerId
+    return random(workerSet.len)
+    
   proc workerLoop(self: Worker) {.thread.} =
     while true:
       var t = self.channel.recv()
@@ -13,30 +21,47 @@ proc createSimpleExecutor*(workers: int): Executor =
       self.parent.channel.send(command)
         
   proc executorLoop(executor: Executor) {.thread.} =
-    var workerId = 0
-    var runningTasks = 0
+    #
+    # a simple executor that schedules submitted tasks
+    # on the first available worker, otherwise chooses at random.
+    #
+    # Keeps rescheduled tasks on the same thread.
+    #
+    var nWorkers = executor.workers.len
+    var taskId = 0
+    var scheduledTasks: Table[int, int] = initTable[int, int]()
+    var workerIsBusy: seq[bool] = newSeq[bool](nWorkers)
+
     while true:
       # wait for task
       var command = executor.channel.recv()
       case command.kind
       of executorTaskSubmit:
         if executor.status != executorShuttingdown:
-          inc runningTasks
-          executor.workers[workerId].submit(command.submittedTask)
-          workerId = (workerId + 1) mod executor.workers.len
+          # attach id to the freshly scheduled task 
+          var scheduledTask = command.submittedTask
+
+          let workerId = findFreeWorker(workerIsBusy)  
+          # add to the table, with its assigned worker
+          scheduledTask.id = taskId
+          scheduledTasks[scheduledTask.id] = workerId 
+          
+          executor.workers[workerId].submit(scheduledTask)
+          inc taskId
+
       of executorTaskReturned:
         if command.scheduledTask.status == taskFinished:
-          dec runningTasks
+          scheduledTasks.del(command.scheduledTask.id)
         else:
-          executor.workers[workerId].submit(command.scheduledTask)
-          workerId = (workerId + 1) mod executor.workers.len
+          let assignedWorker = scheduledTasks[command.scheduledTask.id]
+          executor.workers[assignedWorker].submit(command.scheduledTask)
       of executorShutdown:
         executor.status = executorShuttingdown
       of executorTerminate:
         executor.status = executorTerminated
         break
 
-      if runningTasks <= 0:
+      if scheduledTasks.len == 0:
         break
 
   let simpleStrategy = 
