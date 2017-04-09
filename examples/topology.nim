@@ -1,18 +1,21 @@
 import nimoy, future
 
-type
-  ActorNode[In, Out] =
-    proc(subscriber: ActorRef[Out]): ActorInit[In]
+type  
+  ActorNodeInit[In, Out] =
+    proc(self: ActorRef[In], subscriber: ActorRef[Out])
+    
   
-  SourceCommand = enum
-    Next
-  
-  Edge[In,X,Out] = tuple
-    left: ActorNode[In,X]
-    right: ActorNode[X,Out]  
+#   Edge[In,X,Out] = tuple
+#     left: ActorNode[In,X]
+#     right: ActorNode[X,Out]  
 
-proc `~>`[A,X,B](left: ActorNode[A,X], right: ActorNode[X,B]): Edge[A,X,B] =
-  (left, right)
+# proc `~>`[A,X,B](left: ActorNode[A,X], right: ActorNode[X,B]): Edge[A,X,B] =
+#   (left, right)
+
+proc initNode[In,Out](system: ActorSystem, actorNodeBehavior: ActorNodeInit[In, Out], subscriber: ActorRef[Out]): ActorRef[In] =
+  system.initActor() do (self: ActorRef[In]):
+    actorNodeBehavior(self, subscriber)
+
 
 let system = createActorSystem()
 
@@ -21,9 +24,8 @@ let noSender = system.createActor do (self: ActorRef[int], m: int):
 let deadLetters = system.createActor do (self: ActorRef[int], m: int):
   discard
   
-proc mapNode[In,Out]( f: proc(x:In): Out ): ActorNode[In,Out] = 
-  return proc (subscriber: ActorRef[Out]): ActorInit[In] =
-      return proc(self: ActorRef[In]) =
+proc mapNode[In,Out]( f: proc(x:In): Out ): ActorNodeInit[In,Out] = 
+  return proc (self: ActorRef[In], subscriber: ActorRef[Out]) =
         self.become do (inp: In):
           subscriber.send(f(inp))
 
@@ -34,30 +36,17 @@ proc sinkNode[In]( f: proc(x:In) ): ActorInit[In] =
 
 
 
-proc sourceNode[Out]( iter: iterator(): Out ): ActorNode[SourceCommand,Out] =
-  return proc (subscriber: ActorRef[Out]): ActorInit[SourceCommand] =
-    return proc(self: ActorRef[SourceCommand]) =
-      self.become do (e: SourceCommand):
-        subscriber.send(iter())
-
-
-let src: ActorNode[SourceCommand,int]  = sourceNode[int](
-  iterator(): int = 
-    for i in 0..10: 
-      yield i 
-)
 let sink: ActorInit[int] = sinkNode[int]( (x: int) => echo(x) )
-let map2: ActorNode[int, int] = mapNode[int,int]( (x: int) => x-1 )
-let map1: ActorNode[int, int] = mapNode[int,int]( (x: int) => x*2 )
+let map2: ActorNodeInit[int, int] = mapNode[int,int]( (x: int) => x-1 )
+let map1: ActorNodeInit[int, int] = mapNode[int,int]( (x: int) => x*2 )
 
 let sinkRef = system.initActor(sink)
-let map2Ref = system.initActor(map2(sinkRef))
-let map1Ref = system.initActor(map1(map2Ref))
-let srcRef  = system.initActor(src(map1Ref))
+let map2Ref = system.initNode(map2, sinkRef)
+let map1Ref = system.initNode(map1, map2Ref)
 
 # send a tick
 for i in 0..10:
-  srcRef.send(Next)
+  map1Ref.send(i)
 
 
 # for i in 0..10:
