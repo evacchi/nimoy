@@ -8,6 +8,7 @@ type
     taskFinished
 
   ScheduledTask* = object
+    id*: int
     task*: Task
     status*: TaskStatus
 
@@ -55,7 +56,7 @@ type
   WorkerLoop* = proc(self: Worker) {.thread.}
 
 proc toScheduledTask*(task: Task): ScheduledTask =
-  ScheduledTask(task: task, status: taskStarted)
+  ScheduledTask(id: -1, task: task, status: taskStarted)
 
 proc submit*(worker: Worker, task: ScheduledTask) =
   worker.channel.send(task)

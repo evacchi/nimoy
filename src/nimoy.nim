@@ -17,13 +17,16 @@ type
     message*:  A
     sender*:   ActorRef[A]
 
-  ActorBehavior*[A] = 
-    proc(context: ActorRef[A], message: A)
+  ActorBehavior*[A] =
+    proc(message: A)
 
-  ActorSystem = object
+  ActorContextBehavior*[A] =
+    proc(self: ActorRef[A], message: A)
+
+  ActorSystem* = object
     executor: Executor
 
-proc nop*[A](self: ActorRef[A], message: A) =
+proc nop*[A](message: A) =
   echo "Unitialized actor could not handle message ", message
 
 proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
@@ -48,6 +51,9 @@ proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
 proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
   actorRef.actor.send(sysMessage)
 
+template `!`*(receiver, message: untyped) =
+  receiver.send(message)
+
 proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.sysbox.open()
@@ -57,9 +63,21 @@ proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
   init(actorRef)
   actorRef
 
-proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =
-  createActor[A] do (self: ActorRef[A]):
-    self.become(receive)
+proc destroyActor*[A](actor: Actor[A]) =
+  deallocShared(actor)
+
+proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =    
+  proc init(self: ActorRef[A]) =
+    self.become(ActorBehavior[A](receive))
+
+  createActor[A](init = init)
+
+proc createActor*[A](receive: ActorContextBehavior[A]): ActorRef[A] =
+  proc init(self: ActorRef[A]) =
+    self.become do (message: A):
+      receive(self, message)
+
+  createActor[A](init = init)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
   return proc(): TaskStatus {.gcsafe.} =
@@ -68,11 +86,12 @@ proc toTask*[A](actorRef: ActorRef[A]): Task =
     if hasSysMsg:
       case sysMsg
       of sysKill:
+        destroyActor(actorRef.actor)
         taskFinished
     else:
       let (hasMsg, msg) = actor.mailbox.tryRecv()
       if hasMsg:
-        actor.behavior(actorRef, msg)
+        actor.behavior(msg)
       taskContinue
 
 proc createActorSystem*(executor: Executor): ActorSystem =
@@ -88,14 +107,21 @@ proc awaitTermination*(system: ActorSystem, maxSeconds: float) =
   system.executor.awaitTermination(maxSeconds)
 
 
-proc createActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
-  let actorRef = createActor[A](init)
+proc initActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
+  let actorRef = createActor[A](init = init)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
 
 proc createActor*[A](system: ActorSystem, receive: ActorBehavior[A]): ActorRef[A] =
-  let actorRef = createActor[A](receive)
+  let actorRef = createActor[A](receive = receive)
   let task = actorRef.toTask
   system.executor.submit(task)
   actorRef
+
+proc createActor*[A](system: ActorSystem, receive: ActorContextBehavior[A]): ActorRef[A] =
+  let actorRef = createActor[A](receive = receive)
+  let task = actorRef.toTask
+  system.executor.submit(task)
+  actorRef
+
