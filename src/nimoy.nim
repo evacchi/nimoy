@@ -17,6 +17,9 @@ type
     message*:  A
     sender*:   ActorRef[A]
 
+  ActorInit*[A] =
+    proc(self: ActorRef[A])
+    
   ActorBehavior*[A] =
     proc(message: A)
 
@@ -54,7 +57,7 @@ proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
 template `!`*(receiver, message: untyped) =
   receiver.send(message)
 
-proc createActor*[A](init: proc(self: ActorRef[A])): ActorRef[A] =
+proc createActor*[A](init: ActorInit[A]): ActorRef[A] =
   var actor = cast[Actor[A]](allocShared0(sizeof(ActorObj[A])))
   actor.sysbox.open()
   actor.mailbox.open()
@@ -107,7 +110,7 @@ proc awaitTermination*(system: ActorSystem, maxSeconds: float) =
   system.executor.awaitTermination(maxSeconds)
 
 
-proc initActor*[A](system: ActorSystem, init: proc(self: ActorRef[A])): ActorRef[A] =
+proc initActor*[A](system: ActorSystem, init: ActorInit[A]): ActorRef[A] =
   let actorRef = createActor[A](init = init)
   let task = actorRef.toTask
   system.executor.submit(task)
