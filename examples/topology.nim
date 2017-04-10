@@ -1,4 +1,4 @@
-import nimoy, future, options
+import nimoy, future
 
 type  
   ActorNode[In, Out] =
@@ -112,30 +112,29 @@ let node4  = createNode((x: int) => x)
 let sink   = createSink((x: int) => echo(x))
 
 
-proc materialize[Out,In](flow: Flow[X,In], sink: Node[X,Out]): ActorRef[In] = 
-  flow.system.initActor(sinkNode(sink.f))
-  materialize(flow, flow.flow)
-
-proc materialize[Out,In](flow: Flow[Out,In], sink: Sink[Out]): ActorRef[Out] = 
-  flow.system.initActor(sinkNode(sink.f))
-  materialize(flow, flow.flow)
-
-
 
 proc flow[In](system: ActorSystem): Flow[In,In] =
-  discard
+  result.system = system
 
 proc `~>`[In,X,Out](flow: Flow[X,In], node: Node[X,Out]): Flow[Out, Flow[X,In]] =
-  discard
+  result.system = flow.system
+  result.flow = flow
 
-proc `~>`[In,Out](flow: Flow[Out,In], sink: Sink[In]): Flow[Out,Flow[Out,In]] =
-  Flow[Out,Flow[Out,In]](system: flow.system, nextRef: nextRef)
+proc `~>`[In,Out](flow: Flow[Out,In], sink: Sink[Out]): Flow[Out,Flow[Out,In]] =
+  result.system = flow.system
+  result.flow = flow
 
-proc fanIn[In1,In2,Out](l: Flow[Out,In1], r: Flow[Out,In2]): Flow[ Out, Flow[ Flow[Out, In1], Flow[Out,In2] ] ] =
-  discard
 
-proc fanOut[In,Out](l: Flow[Out,In]): tuple[left: Flow[Out,In], right: Flow[Out,In]] =
-  discard
+proc fanIn*[In1,In2,Out](leftFlow: Flow[Out,In1], rightFlow: Flow[Out,In2]): Flow[ Out, tuple[left: Flow[Out, In1], right: Flow[Out,In2] ] ] =
+  result.system = leftFlow.system
+  result.flow = (leftFlow, rightFlow)
+
+
+proc fanOut*[In,Out](flow: Flow[Out,In]): tuple[left: Flow[Out,In], right: Flow[Out,In]] =
+  (
+    Flow[Out,In](system: flow.system, flow: flow.flow),
+    Flow[Out,In](system: flow.system, flow: flow.flow)
+  )
 
 let system = createActorSystem()
 let t = flow[int](system) ~> node1 ~> node2 ~> node3 
