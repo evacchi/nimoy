@@ -83,6 +83,8 @@ proc nodeRef[In,Out](topology: Topology, f: proc(x:In): Out, subscriber: ActorRe
 # t.system.awaitTermination()
 
 type
+  HalfNode[Out] = object
+    discard
   Node[In,Out] = object
     f: In -> Out
   Source[Out] = object
@@ -91,7 +93,8 @@ type
     f: In -> void
   Flow[Out,In] = object
     system: ActorSystem
-    flow: In
+    head: HalfNode[Out]
+    tail: In
 
 
 proc createNode[In,Out](f: In -> Out): Node[In,Out] =
@@ -111,30 +114,36 @@ let node4  = createNode((x: int) => x)
 
 let sink   = createSink((x: int) => echo(x))
 
+proc sinkRef[In](system: ActorSystem, sink: Sink[In] ): ActorRef[In] =
+   system.initActor(sinkNode(sink.f))
 
+
+proc render*[In,Out](flow: Flow[Out,In]): ActorRef[Out] =
+  discard
 
 proc flow[In](system: ActorSystem): Flow[In,In] =
   result.system = system
 
 proc `~>`[In,X,Out](flow: Flow[X,In], node: Node[X,Out]): Flow[Out, Flow[X,In]] =
   result.system = flow.system
-  result.flow = flow
+  result.tail = flow
+  result.head = HalfNode[Out]()
 
 proc `~>`[In,Out](flow: Flow[Out,In], sink: Sink[Out]): Flow[Out,Flow[Out,In]] =
-  result.system = flow.system
-  result.flow = flow
-
+  discard
 
 proc fanIn*[In1,In2,Out](leftFlow: Flow[Out,In1], rightFlow: Flow[Out,In2]): Flow[ Out, tuple[left: Flow[Out, In1], right: Flow[Out,In2] ] ] =
   result.system = leftFlow.system
-  result.flow = (leftFlow, rightFlow)
+  result.tail = (leftFlow, rightFlow)
 
 
 proc fanOut*[In,Out](flow: Flow[Out,In]): tuple[left: Flow[Out,In], right: Flow[Out,In]] =
   (
-    Flow[Out,In](system: flow.system, flow: flow.flow),
-    Flow[Out,In](system: flow.system, flow: flow.flow)
+    Flow[Out,In](system: flow.system, tail: flow.tail),
+    Flow[Out,In](system: flow.system, tail: flow.tail)
   )
+
+  
 
 let system = createActorSystem()
 let t = flow[int](system) ~> node1 ~> node2 ~> node3 
@@ -143,5 +152,8 @@ let (fout1, fout2) = fanOut(t)
 let t1 = fout1 ~> node1 ~> node2 ~> node3
 let t2 = fout2 ~> node4
 
-let mid = fanIn(t1, t2) ~> sink
+let myFlow = fanIn(t1, t2) ~> sink
+
+
+let inRef = myFlow.render()
 
