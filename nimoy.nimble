@@ -33,6 +33,16 @@ task spawn, "compile spawn":
 task kill, "compile kill":
   buildExample("kill")
 
+task topology, "compile topology":
+  --hints: off
+  --threads:on
+  --linedir: on
+  --stacktrace: on
+  --linetrace: on
+  --debuginfo
+  --path: "src"
+  setCommand "c", "examples/topology.nim"
+
 task hellotasks, "compile hellotasks":
   buildExample("hellotasks")
 

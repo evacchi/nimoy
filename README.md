@@ -2,6 +2,14 @@
 
 An experimental minimal actor library for Nim.
 
+## Features
+
+- [Child actor spawning](examples/spawn.nim)
+- [Killing actors](examples/kill.nim)
+- [Topologies](examples/topology.nim)
+- [Pluggable execution strategies](src/nimoy/executors.nim)
+- More to come...
+
 ## Examples
 
 #### [Ping Pong](examples/pingpong.nim)
@@ -79,13 +87,34 @@ pong ! IntMessage(value: 1, replyTo: ping)
 system.awaitTermination(1)
 ```
 
+#### [Topologies](examples/topology.nim)
 
-## More Features
+```nim
+import future, nimoy, nimoy/topologies
 
-- [Child actor spawning](examples/spawn.nim)
-- [Killing actors](examples/kill.nim)
-- [Pluggable execution strategies](src/nimoy/executors.nim)
-- More to come...
+#
+# source ~> map1 ~> fanIn ~> map3 ~> broadcast ~> sink1
+#    +~~~~> map2 ~~~~~^                 +~~~~> sink2
+#  
+
+let t = createTopology()
+
+let sink1Ref = t.sinkRef((x: int) => echo("sink1 = ", x))
+let sink2Ref = t.sinkRef((x: int) => echo("sink2 = ", x))
+let bref     = t.broadcastRef(sink1Ref, sink2Ref)
+let map3Ref  = t.nodeRef((x: int) => x+7,  bref)
+let fanInRef = t.nodeRef((x: int) => ( echo("fan in = ", x); x ), map3Ref)
+let map2Ref  = t.nodeRef((x: int) => x-1, fanInRef)
+let map1Ref  = t.nodeRef((x: int) => x*2, fanInRef)
+
+# send input
+for i in 0..10:
+  map1Ref ! i
+
+t.awaitTermination()
+```
+
+
 
 ### Acknowledgements
 Name is courtesy of @mfirry, logo design by @joevanard
