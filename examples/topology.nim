@@ -1,4 +1,4 @@
-import nimoy, future
+import nimoy, future, options
 
 type  
   ActorNode[In, Out] =
@@ -6,7 +6,7 @@ type
   
   Topology = object
     system: ActorSystem
-    
+
 #   Edge[In,X,Out] = tuple
 #     left: ActorNode[In,X]
 #     right: ActorNode[X,Out]  
@@ -38,7 +38,7 @@ proc broadcastRef[In](
       for s in subs:
         s ! m
 
-proc node[In,Out]( f: proc(x:In): Out ): ActorNode[In,Out] = 
+proc node[In,Out]( f: In -> Out ): ActorNode[In,Out] = 
   (self: ActorRef[In], subscriber: ActorRef[Out]) => 
     self.become((inp: In) => subscriber.send(f(inp)))
 
@@ -65,20 +65,84 @@ proc nodeRef[In,Out](topology: Topology, f: proc(x:In): Out, subscriber: ActorRe
 #    +~~~~> map2 ~~~~~^                 +~~~~> sink2
 #  
 
+# let t = createTopology()
 
-let t = createTopology()
+# let sink1Ref = t.sinkRef((x: int) => echo("sink1 = ", x))
+# let sink2Ref = t.sinkRef((x: int) => echo("sink2 = ", x))
+# let bref = t.broadcastRef(sink1Ref, sink2Ref))
 
-let sink1Ref = t.sinkRef((x: int) => echo("sink1 = ", x))
-let sink2Ref = t.sinkRef((x: int) => echo("sink2 = ", x))
-let bref     = t.broadcastRef(sink1Ref, sink2Ref)
-let map3Ref  = t.nodeRef((x: int) => x+7,  bref)
-let fanInRef = t.nodeRef((x: int) => ( echo("fan in = ", x); x ), map3Ref)
-let map2Ref  = t.nodeRef((x: int) => x-1, fanInRef)
-let map1Ref  = t.nodeRef((x: int) => x*2, fanInRef)
+# let map3Ref  = t.nodeRef((x: int) => x+7,  bref)
+# let fanInRef = t.nodeRef((x: int) => ( echo("fan in = ", x); x ), map3Ref)
+# let map2Ref  = t.nodeRef((x: int) => x-1, fanInRef)
+# let map1Ref  = t.nodeRef((x: int) => x*2, fanInRef)
 
-# send input
-for i in 0..10:
-  map1Ref ! i
+# # send input
+# for i in 0..10:
+#   map1Ref ! i
 
-t.system.awaitTermination()
+# t.system.awaitTermination()
+
+type
+  Node[In,Out] = object
+    f: In -> Out
+  Source[Out] = object
+    f: () -> Out
+  Sink[In] = object
+    f: In -> void
+  Flow[Out,In] = object
+    system: ActorSystem
+    flow: In
+
+
+proc createNode[In,Out](f: In -> Out): Node[In,Out] =
+  Node[In,Out](f:f)
+
+proc createSource[Out](f: () -> Out): Source[Out] =
+  Source[Out](f:f)
+
+proc createSink[In](f: In -> void): Sink[In] =
+  Sink[In](f:f)
+
+let source = createSource(() => 1.int)
+let node1  = createNode((x: int) => x.float*1.0)
+let node2  = createNode((x: float) => x.int)
+let node3  = createNode((x: int) => x)
+let node4  = createNode((x: int) => x)
+
+let sink   = createSink((x: int) => echo(x))
+
+
+proc materialize[Out,In](flow: Flow[X,In], sink: Node[X,Out]): ActorRef[In] = 
+  flow.system.initActor(sinkNode(sink.f))
+  materialize(flow, flow.flow)
+
+proc materialize[Out,In](flow: Flow[Out,In], sink: Sink[Out]): ActorRef[Out] = 
+  flow.system.initActor(sinkNode(sink.f))
+  materialize(flow, flow.flow)
+
+
+
+proc flow[In](system: ActorSystem): Flow[In,In] =
+  discard
+
+proc `~>`[In,X,Out](flow: Flow[X,In], node: Node[X,Out]): Flow[Out, Flow[X,In]] =
+  discard
+
+proc `~>`[In,Out](flow: Flow[Out,In], sink: Sink[In]): Flow[Out,Flow[Out,In]] =
+  Flow[Out,Flow[Out,In]](system: flow.system, nextRef: nextRef)
+
+proc fanIn[In1,In2,Out](l: Flow[Out,In1], r: Flow[Out,In2]): Flow[ Out, Flow[ Flow[Out, In1], Flow[Out,In2] ] ] =
+  discard
+
+proc fanOut[In,Out](l: Flow[Out,In]): tuple[left: Flow[Out,In], right: Flow[Out,In]] =
+  discard
+
+let system = createActorSystem()
+let t = flow[int](system) ~> node1 ~> node2 ~> node3 
+let (fout1, fout2) = fanOut(t)
+
+let t1 = fout1 ~> node1 ~> node2 ~> node3
+let t2 = fout2 ~> node4
+
+let mid = fanIn(t1, t2) ~> sink
 
