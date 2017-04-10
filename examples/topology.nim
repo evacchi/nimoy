@@ -13,14 +13,22 @@ type
 
 proc initNode[In,Out](
   system: ActorSystem, 
-  actorNodeBehavior: 
-  ActorNode[In, Out], 
-  subscriber: ActorRef[Out]): ActorRef[In] =
+  actorNode: ActorNode[In, Out], 
+  subscriber: ActorRef[Out]
+): ActorRef[In] =
   system.initActor(
     (self: ActorRef[In]) => 
-      actorNodeBehavior(self, subscriber))
+      actorNode(self, subscriber))
 
-proc mapNode[In,Out]( f: proc(x:In): Out ): ActorNode[In,Out] = 
+proc createFanOutRef[In](
+  system: ActorSystem, 
+  subscribers: varargs[ActorRef[In]]): ActorRef[In] =
+  let subs = @subscribers
+  system.createActor do (self: ActorRef[In], m: In): 
+      for s in subs:
+        s ! m
+
+proc node[In,Out]( f: proc(x:In): Out ): ActorNode[In,Out] = 
   (self: ActorRef[In], subscriber: ActorRef[Out]) => 
     self.become((inp: In) => subscriber.send(f(inp)))
 
@@ -34,36 +42,28 @@ proc fanOutNode[In](node1: ActorRef[In], node2: ActorRef[In]): ActorInit[In] =
       node1.send(inp)
       node2.send(inp)
 
-# nodes
-let sink1: ActorInit[int] = sinkNode[int]( (x: int) => echo("sink1 = ", x) )
-let sink2: ActorInit[int] = sinkNode[int]( (x: int) => echo("sink2 = ", x) )
+proc createSinkRef[In](system: ActorSystem, f: proc(x:In) ): ActorRef[In] =
+   system.initActor(sinkNode(f))
 
-let fanIn: ActorNode[int, int] = mapNode[int,int] do (x:int) -> int:
-  echo("fan in = ", x) 
-  x
+proc createNodeRef[In,Out](system: ActorSystem, f: proc(x:In): Out, subscriber: ActorRef[Out]): ActorRef[In] =
+   system.initNode(node[In,Out](f), subscriber)
 
-let map3: ActorNode[int, int] = mapNode[int,int]( (x: int) => x+7 )
-let map2: ActorNode[int, int] = mapNode[int,int]( (x: int) => x-1 )
-let map1: ActorNode[int, int] = mapNode[int,int]( (x: int) => x*2 )
 
 # instantiate topology
 let system = createActorSystem()
 
 #
 # source ~> map1 ~> fanIn ~> map3 ~> fanOut ~> sink1
-# source ~> map2 ~~~~~^                 +~~~~> sink2
-#
+#    +~~~~> map2 ~~~~~^                 +~~~~> sink2
+#  
 
-
-let sink1Ref = system.initActor(sink1)
-let sink2Ref = system.initActor(sink2)
-let fanOut: ActorInit[int] = fanOutNode[int]( sink1Ref, sink2Ref )
-let fanOutRef = system.initActor(fanOut)
-
-let map3Ref = system.initNode(map3, fanOutRef)
-let fanInRef = system.initNode(fanIn, map3Ref)
-let map2Ref = system.initNode(map2, fanInRef)
-let map1Ref = system.initNode(map1, fanInRef)
+let sink1Ref  = system.createSinkRef((x: int) => echo("sink1 = ", x))
+let sink2Ref  = system.createSinkRef((x: int) => echo("sink2 = ", x))
+let fanOutRef = system.createFanOutRef(sink1Ref, sink2Ref)
+let map3Ref   = system.createNodeRef((x: int) => x+7, fanOutRef)
+let fanInRef  = system.createNodeRef((x: int) => ( echo("fan in = ", x); x ), map3Ref)
+let map2Ref   = system.createNodeRef((x: int) => x-1, fanInRef)
+let map1Ref   = system.createNodeRef((x: int) => x*2, fanInRef)
 
 # send input
 for i in 0..10:
