@@ -5,8 +5,8 @@ An experimental minimal actor library for Nim.
 ## Features
 
 - Actor lifecycle control: [spawning children](examples/spawn.nim) and [killing actors](examples/kill.nim)
-- [Experimental support to actor topologies](examples/topology.nim)
-- [Pluggable execution strategies](src/nimoy/executors.nim)
+- Experimental support to [actor topologies](examples/topology.nim)
+- Pluggable [execution strategies](src/nimoy/executors.nim)
 - More to come...
 
 ## Examples
