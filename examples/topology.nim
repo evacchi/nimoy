@@ -58,6 +58,14 @@ proc sinkRef[In](topology: Topology, f: proc(x:In) ): ActorRef[In] =
 proc nodeRef[In,Out](topology: Topology, f: proc(x:In): Out, subscriber: ActorRef[Out]): ActorRef[In] =
    topology.initNode(node[In,Out](f), subscriber)
 
+proc initNode[In,Out](
+  system: ActorSystem, 
+  actorNode: ActorNode[In, Out], 
+  subscriber: ActorRef[Out]
+): ActorRef[In] =
+  system.initActor(
+    (self: ActorRef[In]) => 
+      actorNode(self, subscriber))
 
 
 #
@@ -91,11 +99,17 @@ type
     f: () -> Out
   Sink[In] = object
     f: In -> void
-  Flow[Out,In] = object
-    system: ActorSystem
-    head: HalfNode[Out]
-    tail: In
 
+  NilFlow = object
+    discard
+
+  Flow[Head, Tail] = object
+    system: ActorSystem
+    head: Head
+    tail: Tail
+
+  FlowBuilder[In] = object
+    system: ActorSystem
 
 proc createNode[In,Out](f: In -> Out): Node[In,Out] =
   Node[In,Out](f:f)
@@ -106,54 +120,71 @@ proc createSource[Out](f: () -> Out): Source[Out] =
 proc createSink[In](f: In -> void): Sink[In] =
   Sink[In](f:f)
 
-let source = createSource(() => 1.int)
-let node1  = createNode((x: int) => x.float*1.0)
-let node2  = createNode((x: float) => x.int)
-let node3  = createNode((x: int) => x)
-let node4  = createNode((x: int) => x)
+proc renderNode[In,Out](system: ActorSystem, n: Node[In,Out], subscriber: ActorRef[Out]): ActorRef[In] =
+  system.initNode(node[In,Out](n.f), subscriber)
 
-let sink   = createSink((x: int) => echo(x))
+proc render*[Out](flow: NilFlow, subscriber: ActorRef[Out]): ActorRef[Out] =
+  subscriber
 
-proc sinkRef[In](system: ActorSystem, sink: Sink[In] ): ActorRef[In] =
-   system.initActor(sinkNode(sink.f))
+proc render*[Head,Tail,Out](flow: Flow[Head,Tail], subscriber: ActorRef[Out]): auto =
+  let nextRef = renderNode(flow.system, flow.head, subscriber)
+  render(flow.tail, nextRef)
 
-
-proc render*[In,Out](flow: Flow[Out,In]): ActorRef[Out] =
-  discard
-
-proc flow[In](system: ActorSystem): Flow[In,In] =
+proc flow[In](system: ActorSystem): FlowBuilder[In] =
   result.system = system
 
-proc `~>`[In,X,Out](flow: Flow[X,In], node: Node[X,Out]): Flow[Out, Flow[X,In]] =
+proc `~>`[In,Out](flow: FlowBuilder[In], node: Node[In,Out]): Flow[Node[In,Out], NilFlow] =
   result.system = flow.system
+  result.head = node
+  result.tail = NilFlow()
+
+proc `~>`[Head,Tail,In,Out](flow: Flow[Head,Tail], node: Node[In,Out]): Flow[ Node[In,Out], Flow[Head, Tail] ] =
+  result.system = flow.system
+  result.head = node
   result.tail = flow
-  result.head = HalfNode[Out]()
 
-proc `~>`[In,Out](flow: Flow[Out,In], sink: Sink[Out]): Flow[Out,Flow[Out,In]] =
-  discard
-
-proc fanIn*[In1,In2,Out](leftFlow: Flow[Out,In1], rightFlow: Flow[Out,In2]): Flow[ Out, tuple[left: Flow[Out, In1], right: Flow[Out,In2] ] ] =
-  result.system = leftFlow.system
-  result.tail = (leftFlow, rightFlow)
+# proc fanIn*[In1,In2,Out](leftFlow: Flow[Out,In1], rightFlow: Flow[Out,In2]): Flow[ Out, tuple[left: Flow[Out, In1], right: Flow[Out,In2] ] ] =
+#   result.system = leftFlow.system
+#   result.tail = (leftFlow, rightFlow)
 
 
-proc fanOut*[In,Out](flow: Flow[Out,In]): tuple[left: Flow[Out,In], right: Flow[Out,In]] =
-  (
-    Flow[Out,In](system: flow.system, tail: flow.tail),
-    Flow[Out,In](system: flow.system, tail: flow.tail)
-  )
+# proc fanOut*[In,Out](flow: Flow[Out,In]): tuple[left: Flow[Out,In], right: Flow[Out,In]] =
+#   (
+#     Flow[Out,In](system: flow.system, tail: flow.tail),
+#     Flow[Out,In](system: flow.system, tail: flow.tail)
+#   )
 
-  
+
+proc flow[Head,Tail](h:Head,t:Tail): auto = 
+  Flow[Head,Tail](head:h,tail:t)
+
 
 let system = createActorSystem()
-let t = flow[int](system) ~> node1 ~> node2 ~> node3 
-let (fout1, fout2) = fanOut(t)
 
-let t1 = fout1 ~> node1 ~> node2 ~> node3
-let t2 = fout2 ~> node4
+let source = createSource(() => 1.int)
+let node1: Node[int,float]  = createNode((x: int) => x.float*2.0)
+let node2: Node[float,float]  = createNode((x: float) => x/3.0)
+let node3: Node[float,float]  = createNode((x: float) => (10*x))
+let node4  = createNode((x: int) => x)
 
-let myFlow = fanIn(t1, t2) ~> sink
+let sink   = createSink((x: float) => echo(x))
+
+proc sinkRef[In](system: ActorSystem, sink: Sink[In]): ActorRef[In] =
+   system.initActor(sinkNode(sink.f))
+
+let t3 = flow[int](system) ~> node1 ~> node2 ~> node3
 
 
-let inRef = myFlow.render()
+# let (fout1, fout2) = fanOut(t)
+
+# let t1 = fout1 ~> node1 ~> node2 ~> node3
+# let t2 = fout2 ~> node4
+
+# let myFlow = fanIn(t1, t2)
+
+let sref = system.initActor(sinkNode(sink.f))
+let inRef = t3.render(sref)
+
+inRef.send(1)
+system.awaitTermination()
 
