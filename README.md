@@ -97,20 +97,34 @@ import future, nimoy, nimoy/topologies
 #  
 
 let t = createTopology()
+let sink1 = allocActorChannel[int]()
+let sink2 = allocActorChannel[int]()
 
-let sink1Ref = t.sinkRef((x: int) => echo("sink1 = ", x))
-let sink2Ref = t.sinkRef((x: int) => echo("sink2 = ", x))
+# declare output sinks
+let sink1Ref = t.sinkRef((x: int) => sink1.send(x*100))
+let sink2Ref = t.sinkRef((x: int) => sink2.send(x))
+
+# broadcast to both sinks
 let bref     = t.broadcastRef(sink1Ref, sink2Ref)
-let map3Ref  = t.nodeRef((x: int) => x+7,  bref)
-let fanInRef = t.nodeRef((x: int) => ( echo("fan in = ", x); x ), map3Ref)
-let map2Ref  = t.nodeRef((x: int) => x-1, fanInRef)
-let map1Ref  = t.nodeRef((x: int) => x*2, fanInRef)
 
-# send input
+# map to the broadcast
+let map3Ref  = t.nodeRef((x: int) => x+7,  bref)
+
+# map to map3
+let fanInRef = t.nodeRef((x: int) => ( echo("fan in = ", x); x ), map3Ref)
+
+# two nodes that both go into fanIn
+let map1Ref  = t.nodeRef((x: int) => x*2, fanInRef)
+let map2Ref  = t.nodeRef((x: int) => x-1, fanInRef)
+
+# send data to both the sources
 for i in 0..10:
   map1Ref ! i
+  map2Ref ! i
 
-t.awaitTermination()
+for i in 0..10:
+  echo sink1.recv()
+  echo sink2.recv()
 ```
 
 
