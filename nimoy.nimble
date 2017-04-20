@@ -11,7 +11,7 @@ requires "nim >= 0.16.0"
 srcDir = "src"
 
 proc buildExample(example: string) =
-  echo "\nBuilding ", example, "..."
+  echo "\nBuilding example ", example, "..."
   exec "nim c "           &
        "--hints:off "     &
        "--linedir:on "    &
@@ -20,6 +20,22 @@ proc buildExample(example: string) =
        "--debuginfo "     &
        "--threads:on "    &
        "--path:src examples/" & example & ".nim"
+
+proc buildBenchmark(bench: string) =
+  echo "\nBuilding benchmark ", bench, "..."
+  exec "nim c "           &
+      #  "--hints:off "     &
+      #  "--linedir:on "    &
+      #  "--stacktrace:on " &
+      #  "--linetrace:on "  &
+      #  "--debuginfo "     &
+       "-d:release "    &
+       "--threads:on "    &
+       "--path:src benchmarks/" & bench & ".nim"
+
+
+task skynetBenchmark, "compile skynet benchmark":
+  buildBenchmark("skynet")
 
 task pingpong, "compile pingpong":
   buildExample("pingpong")
