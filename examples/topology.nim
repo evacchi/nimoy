@@ -3,8 +3,7 @@ import future, nimoy, nimoy/topologies
 #
 # source ~> map1 ~> fanIn ~> map3 ~> broadcast ~> sink1
 #    +~~~~> map2 ~~~~~^                 +~~~~> sink2
-#  
-
+#
 
 let t = createTopology()
 let sink1 = allocActorChannel[int]()
