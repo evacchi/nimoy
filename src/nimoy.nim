@@ -3,13 +3,10 @@ import nimoy/tasks, nimoy/executors
 type
 
   ActorInit*[A] =
-    proc(self: ActorRef[A])
+    proc(self: Actor[A])
     
   ActorBehavior*[A] =
     proc(message: A)
-
-  ActorContextBehavior*[A] =
-    proc(ctx: ActorRef[A], message: A)
 
   ActorChannelObj[A] = object
     channel:  Channel[A]
@@ -22,14 +19,10 @@ type
   
   Actor*[A] = object
     sys:  ActorChannel[SystemMessage]
-    main: ActorChannel[A]
+    main*: ActorChannel[A]
 
   ActorRef*[A] = object
-    actor: Actor[A]
-    
-  Envelope*[A] = object
-    message*:  A
-    sender*:   ActorRef[A]
+    channel: ActorChannel[A]
 
   ActorSystem* = object
     executor: Executor
@@ -37,15 +30,17 @@ type
 proc nop*[A](message: A) =
   echo "Unitialized actor could not handle message ", message
 
-proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
-  let e = Envelope(
-    message: message,
-    sender: sender
-  )
-  receiver.actor.mailbox.send(e)
+proc toRef*[A](actorChannel: ActorChannel[A]): ActorRef[A] =
+  ActorRef[A](channel: actorChannel)
 
-proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
-  actorRef.actor.main.behavior = newBehavior
+proc toRef*[A](actor: Actor[A]): ActorRef[A] =
+  ActorRef[A](channel: actor.main)
+
+proc becomeOLD*[A](channel: ActorChannel[A], newBehavior: ActorBehavior[A]) =
+  channel.behavior = newBehavior
+
+proc onReceive*[A](channel: ActorChannel[A], newBehavior: ActorBehavior[A]) =
+  channel.behavior = newBehavior
 
 proc send*[A](actorChannel: ActorChannel[A], message: A) =
   actorChannel.channel.send(message)
@@ -56,17 +51,14 @@ proc tryRecv*[A](actorChannel: ActorChannel[A]): tuple[dataAvailable: bool, msg:
 proc recv*[A](actorChannel: ActorChannel[A]): A =
   actorChannel.channel.recv()
 
+proc send*[A](actorRef: ActorRef[A], message: A) =
+  actorRef.channel.send(message)
+
 proc send*[A](actor: Actor[A], message: A) =
   actor.main.send(message)
 
-proc send*[A](actorRef: ActorRef[A], message: A) =
-  actorRef.actor.send(message)
-
 proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
   actor.sys.send(sysMessage)
-
-proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
-  actorRef.actor.send(sysMessage)
 
 template `!`*(receiver, message: untyped) =
   receiver.send(message)
@@ -87,33 +79,23 @@ proc destroyActor*[A](actor: Actor[A]) =
   deallocShared(actor.main)
   deallocShared(actor.sys)
 
-proc createActor*[A](init: ActorInit[A]): ActorRef[A] =
-  var actor = allocActor[A]()
-  let actorRef = ActorRef[A](actor: actor)
-  init(actorRef)
-  actorRef
+proc createActor*[A](init: ActorInit[A]): Actor[A] =
+  result = allocActor[A]()
+  init(result)
 
-proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =    
-  proc init(self: ActorRef[A]) =
-    self.become(ActorBehavior[A](receive))
+proc createActor*[A](receive: ActorBehavior[A]): Actor[A] =    
+  proc init(self: Actor[A]) =
+    self.main.onReceive(ActorBehavior[A](receive))
 
   createActor[A](init = init)
 
-proc createActor*[A](receive: ActorContextBehavior[A]): ActorRef[A] =
-  proc init(self: ActorRef[A]) =
-    self.become do (message: A):
-      receive(self, message)
-
-  createActor[A](init = init)
-
-proc toTask*[A](actorRef: ActorRef[A]): Task =
+proc toTask*[A](actor: Actor[A]): Task =
   return proc(): TaskStatus {.gcsafe.} =
-    let actor = actorRef.actor
     let (hasSysMsg, sysMsg) = actor.sys.tryRecv()
     if hasSysMsg:
       case sysMsg
       of sysKill:
-        destroyActor(actorRef.actor)
+        destroyActor(actor)
         taskFinished
     else:
       let (hasMsg, msg) = actor.main.tryRecv()
@@ -133,22 +115,14 @@ proc awaitTermination*(system: ActorSystem) =
 proc awaitTermination*(system: ActorSystem, maxSeconds: float) =
   system.executor.awaitTermination(maxSeconds)
 
-
 proc initActor*[A](system: ActorSystem, init: ActorInit[A]): ActorRef[A] =
-  let actorRef = createActor[A](init = init)
-  let task = actorRef.toTask
+  let actor = createActor[A](init = init)
+  let task = actor.toTask
   system.executor.submit(task)
-  actorRef
+  result.channel = actor.main
 
 proc createActor*[A](system: ActorSystem, receive: ActorBehavior[A]): ActorRef[A] =
-  let actorRef = createActor[A](receive = receive)
-  let task = actorRef.toTask
+  let actor = createActor[A](receive = receive)
+  let task = actor.toTask
   system.executor.submit(task)
-  actorRef
-
-proc createActor*[A](system: ActorSystem, receive: ActorContextBehavior[A]): ActorRef[A] =
-  let actorRef = createActor[A](receive = receive)
-  let task = actorRef.toTask
-  system.executor.submit(task)
-  actorRef
-
+  result.channel = actor.main

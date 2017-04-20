@@ -11,14 +11,16 @@ type
 let system = createActorSystem()
 
 # a ping actor expects Pings, replies with Pongs
-let ping = system.createActor() do (self: ActorRef[Ping], m: Ping):
-  echo "ping received from ", m.replyTo
-  m.replyTo ! Pong(replyTo: self)
+let ping = system.initActor do (self: Actor[Ping]):
+  self.main.onReceive do (m: Ping): 
+    echo "ping received from ", m.replyTo
+    m.replyTo ! Pong(replyTo: self.toRef)
 
 # a pong actor expects Pongs, replies with Pings
-let pong = system.createActor() do (self: ActorRef[Pong], m: Pong):
-  echo "pong received from ", m.replyTo
-  m.replyTo ! Ping(replyTo: self)
+let pong = system.initActor do (self: Actor[Pong]):
+  self.main.onReceive do (m: Pong): 
+    echo "pong received from ", m.replyTo
+    m.replyTo ! Ping(replyTo: self.toRef)
 
 # kick it off
 ping ! Ping(replyTo: pong)
