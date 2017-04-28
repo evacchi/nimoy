@@ -1,4 +1,4 @@
-import times, os
+import times, os, slist
 
 type
   Task* = proc(): TaskStatus {.gcsafe.}
@@ -40,16 +40,16 @@ type
 
   ExecutorObj* = object
     workers*: seq[Worker]
-    channel*: Channel[ExecutorCommand]
+    channel*: SharedList[ExecutorCommand]
     thread*:  Thread[Executor]
-    status*:   ExecutorStatus
+    status*:  ExecutorStatus
   Executor* = ptr ExecutorObj
   ExecutorLoop* = proc(self: Executor) {.thread.}
 
   WorkerId* = int
   WorkerObj* = object
     id*:      WorkerId
-    channel*: Channel[ScheduledTask]
+    channel*: SharedList[ScheduledTask]
     thread*:  Thread[Worker]
     parent*:  Executor
   Worker* = ptr WorkerObj
@@ -59,12 +59,12 @@ proc toScheduledTask*(task: Task): ScheduledTask =
   ScheduledTask(id: -1, task: task, status: taskStarted)
 
 proc submit*(worker: Worker, task: ScheduledTask) =
-  worker.channel.send(task)
+  worker.channel.enqueue(task)
 
 proc createWorker*(id: int, workerLoop: WorkerLoop, parent: Executor): Worker =
   result = cast[Worker](allocShared0(sizeof(WorkerObj)))
   result.id = id
-  result.channel.open()
+  result.channel = initSharedList[ScheduledTask]()
   result.parent = parent
   createThread(result.thread, workerLoop, result)
 
@@ -79,21 +79,21 @@ proc awaitTermination*(executor: Executor, maxSeconds: float) =
     current = epochTime()
 
 proc submit(executor: Executor, task: ScheduledTask) =
-  executor.channel.send(ExecutorCommand(kind: executorTaskSubmit, submittedTask: task))
+  executor.channel.enqueue(ExecutorCommand(kind: executorTaskSubmit, submittedTask: task))
 
 proc submit*(executor: Executor, task: Task) =
   executor.submit(task.toScheduledTask)
 
 proc shutdown*(executor: Executor) =
-  executor.channel.send(ExecutorCommand(kind: executorShutdown))
+  executor.channel.enqueue(ExecutorCommand(kind: executorShutdown))
 
 proc terminate*(executor: Executor) =
-  executor.channel.send(ExecutorCommand(kind: executorTerminate))
+  executor.channel.enqueue(ExecutorCommand(kind: executorTerminate))
 
 proc createExecutor*(workers: int, executorStrategy: ExecutorStrategy): Executor =
   result = cast[Executor](allocShared0(sizeof(ExecutorObj)))
   result.workers = @[]
-  result.channel.open()
+  result.channel = initSharedList[ExecutorCommand]()
   result.status = executorRunning
   for i in 0..<workers:
     let w = createWorker(i, executorStrategy.workerLoop, result) 

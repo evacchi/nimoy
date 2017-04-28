@@ -1,4 +1,4 @@
-import nimoy/tasks, nimoy/executors
+import nimoy/tasks, nimoy/executors, nimoy/slist, options
 
 type
 
@@ -12,7 +12,7 @@ type
     proc(ctx: ActorRef[A], message: A)
 
   ActorChannelObj[A] = object
-    channel:  Channel[A]
+    channel:  SharedList[A]
     behavior: ActorBehavior[A]
 
   ActorChannel[A] = ptr ActorChannelObj[A]
@@ -37,24 +37,20 @@ type
 proc nop*[A](message: A) =
   echo "Unitialized actor could not handle message ", message
 
-proc send*[A](receiver: ActorRef[A], message: A, sender: ActorRef[A]) =
-  let e = Envelope(
-    message: message,
-    sender: sender
-  )
-  receiver.actor.mailbox.send(e)
-
 proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
   actorRef.actor.main.behavior = newBehavior
 
 proc send*[A](actorChannel: ActorChannel[A], message: A) =
-  actorChannel.channel.send(message)
+  actorChannel.channel.enqueue(message)
 
 proc tryRecv*[A](actorChannel: ActorChannel[A]): tuple[dataAvailable: bool, msg: A] =
-  actorChannel.channel.tryRecv()
+  let r: Option[A] = actorChannel.channel.dequeue()
+  result.dataAvailable = r.isSome
+  if r.isSome:
+    result.msg = r.get
 
-proc recv*[A](actorChannel: ActorChannel[A]): A =
-  actorChannel.channel.recv()
+#proc recv*[A](actorChannel: ActorChannel[A]): A =
+#  actorChannel.channel.recv()
 
 proc send*[A](actor: Actor[A], message: A) =
   actor.main.send(message)
@@ -73,19 +69,20 @@ template `!`*(receiver, message: untyped) =
 
 proc allocActorChannel*[A](): ActorChannel[A] =
   result = cast[ActorChannel[A]](allocShared0(sizeof(ActorChannelObj[A])))
-  result.channel.open()
+  result.channel = initSharedList[A]()
   result.behavior = nop
 
 proc destroyActorChannel*[A](actorChannel: ActorChannel[A]) =
   deallocShared(actorChannel)
 
-proc allocActor[A](): Actor[A] =
+proc allocActor*[A](): Actor[A] =
   result.main = allocActorChannel[A]()
   result.sys  = allocActorChannel[SystemMessage]()
 
 proc destroyActor*[A](actor: Actor[A]) =
-  deallocShared(actor.main)
-  deallocShared(actor.sys)
+  discard
+  #deallocShared(actor.main)
+  #deallocShared(actor.sys)
 
 proc createActor*[A](init: ActorInit[A]): ActorRef[A] =
   var actor = allocActor[A]()
@@ -107,7 +104,7 @@ proc createActor*[A](receive: ActorContextBehavior[A]): ActorRef[A] =
   createActor[A](init = init)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
-  return proc(): TaskStatus {.gcsafe.} =
+  return proc(): TaskStatus =
     let actor = actorRef.actor
     let (hasSysMsg, sysMsg) = actor.sys.tryRecv()
     if hasSysMsg:

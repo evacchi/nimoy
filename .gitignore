@@ -1,7 +1,9 @@
 .vscode
 nimcache/
 
-# ignore everything in examples
+# ignore everything in examples, benchmarks
 examples/*
+benchmarks/*
 # unless it ends with .nim
 !examples/*.nim
+!benchmarks/*.nim

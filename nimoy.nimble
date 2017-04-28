@@ -24,12 +24,15 @@ proc buildExample(example: string) =
 proc buildBenchmark(bench: string) =
   echo "\nBuilding benchmark ", bench, "..."
   exec "nim c "           &
-      #  "--hints:off "     &
-      #  "--linedir:on "    &
-      #  "--stacktrace:on " &
-      #  "--linetrace:on "  &
-      #  "--debuginfo "     &
-       "-d:release "    &
+      # "--hints:off "     &
+      # "--linedir:on "    &
+      # "--stacktrace:on " &
+      # "--linetrace:on "  &
+      # "--debuginfo "     &
+      # "--define: nimTypeNames " &
+      "--define: release " &
+      "--gc:boehm " &
+       #"--gc:markandSweep "&
        "--threads:on "    &
        "--path:src benchmarks/" & bench & ".nim"
 
