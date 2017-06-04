@@ -21,18 +21,20 @@ type
     next, prev: SharedListNode[A]
     value: A
 
-  SharedList*[A] = object ## generic shared list
+  SharedList*[A] = ptr object ## generic shared list
     first, last: SharedListNode[A]
     lock: Lock
 
 template withLock(t, x: untyped) =
-  acquire(t.lock)
+  assert t!=nil
+  acquire(t[].lock)
   x
-  release(t.lock)
+  release(t[].lock)
 
 
 proc initSharedList*[A](): SharedList[A] =
-  initLock result.lock
+  result = cast[type result](allocShared0(sizeof(result[])))
+  initLock(result[].lock)
   result.first = nil
   result.last  = nil
 
@@ -48,7 +50,8 @@ proc enqueue[A](node: SharedListNode[A], y: A): SharedListNode[A] =
   result.prev = node
   node.next = result
 
-proc enqueue*[A](x: var SharedList[A]; y: A) =
+proc enqueue*[A](x: SharedList[A]; y: A) =
+  assert x!=nil
   withLock(x):
     if x.last == nil:
       assert(x.first == nil)
@@ -63,7 +66,7 @@ proc enqueue*[A](x: var SharedList[A]; y: A) =
 #   withLock(x):
 #     result = x.head == nil or x.d.len == 0
 
-proc dequeue*[A](x: var SharedList[A]): Option[A] =
+proc dequeue*[A](x: SharedList[A]): Option[A] =
   withLock(x):
     result = none(A)
     if x.first != nil: # it's empty
@@ -76,7 +79,7 @@ proc dequeue*[A](x: var SharedList[A]): Option[A] =
         x.first.prev = nil
       result = some(deallocNode(resultNode))
   
-proc clear*[A](t: var SharedList[A]) =
+proc clear*[A](t: SharedList[A]) =
   withLock(t):
     var it = t.head
     while it != nil:
@@ -86,6 +89,6 @@ proc clear*[A](t: var SharedList[A]) =
     t.head = nil
     t.tail = nil
 
-proc deinitSharedList*[A](t: var SharedList[A]) =
+proc deinitSharedList*[A](t: SharedList[A]) =
   clear(t)
-  deinitLock t.lock
+  deinitLock t[].lock

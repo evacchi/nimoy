@@ -25,13 +25,13 @@ proc buildBenchmark(bench: string) =
   echo "\nBuilding benchmark ", bench, "..."
   exec "nim c "           &
       # "--hints:off "     &
-      # "--linedir:on "    &
-      # "--stacktrace:on " &
-      # "--linetrace:on "  &
-      # "--debuginfo "     &
+       #"--linedir:on "    &
+       #"--stacktrace:on " &
+       #"--linetrace:on "  &
+       #"--debuginfo "     &
       # "--define: nimTypeNames " &
-      "--define: release " &
-      "--gc:boehm " &
+       "--define: release " &
+      #"--gc:boehm " &
        #"--gc:markandSweep "&
        "--threads:on "    &
        "--path:src benchmarks/" & bench & ".nim"

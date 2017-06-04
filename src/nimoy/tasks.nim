@@ -1,7 +1,10 @@
 import times, os, slist
 
 type
-  Task* = proc(): TaskStatus {.gcsafe.}
+  Task* = object
+    p*: proc(pp: pointer): TaskStatus {.gcsafe.}
+    pp*: pointer
+
   TaskStatus* = enum
     taskStarted
     taskContinue

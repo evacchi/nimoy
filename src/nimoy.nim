@@ -11,11 +11,9 @@ type
   ActorContextBehavior*[A] =
     proc(ctx: ActorRef[A], message: A)
 
-  ActorChannelObj[A] = object
+  ActorChannel[A] = object
     channel:  SharedList[A]
     behavior: ActorBehavior[A]
-
-  ActorChannel[A] = ptr ActorChannelObj[A]
 
   SystemMessage* = enum
     sysKill
@@ -24,8 +22,7 @@ type
     sys:  ActorChannel[SystemMessage]
     main: ActorChannel[A]
 
-  ActorRef*[A] = object
-    actor: Actor[A]
+  ActorRef*[A] = ptr Actor[A]
     
   Envelope*[A] = object
     message*:  A
@@ -38,13 +35,18 @@ proc nop*[A](message: A) =
   echo "Unitialized actor could not handle message ", message
 
 proc become*[A](actorRef: ActorRef[A], newBehavior: ActorBehavior[A]) =
-  actorRef.actor.main.behavior = newBehavior
+  actorRef.main.behavior = newBehavior
+  let env = rawEnv(newBehavior)
+  let r = cast[RootRef](env)
+  GC_ref(r)
+
 
 proc send*[A](actorChannel: ActorChannel[A], message: A) =
   actorChannel.channel.enqueue(message)
 
 proc tryRecv*[A](actorChannel: ActorChannel[A]): tuple[dataAvailable: bool, msg: A] =
-  let r: Option[A] = actorChannel.channel.dequeue()
+  let ch = actorChannel.channel
+  let r = ch.dequeue()
   result.dataAvailable = r.isSome
   if r.isSome:
     result.msg = r.get
@@ -52,30 +54,31 @@ proc tryRecv*[A](actorChannel: ActorChannel[A]): tuple[dataAvailable: bool, msg:
 #proc recv*[A](actorChannel: ActorChannel[A]): A =
 #  actorChannel.channel.recv()
 
-proc send*[A](actor: Actor[A], message: A) =
-  actor.main.send(message)
+# proc send*[A](actor: Actor[A], message: A) =
+#   actor.main.send(message)
 
 proc send*[A](actorRef: ActorRef[A], message: A) =
-  actorRef.actor.send(message)
+  assert actorRef!=nil  
+  actorRef.main.send(message)
 
-proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
-  actor.sys.send(sysMessage)
+# proc send*[A](actor: Actor[A], sysMessage: SystemMessage) =
+#   actor.sys.send(sysMessage)
 
 proc send*[A](actorRef: ActorRef[A], sysMessage: SystemMessage) =
-  actorRef.actor.send(sysMessage)
+  actorRef.sys.send(sysMessage)
 
 template `!`*(receiver, message: untyped) =
   receiver.send(message)
 
 proc allocActorChannel*[A](): ActorChannel[A] =
-  result = cast[ActorChannel[A]](allocShared0(sizeof(ActorChannelObj[A])))
   result.channel = initSharedList[A]()
   result.behavior = nop
 
 proc destroyActorChannel*[A](actorChannel: ActorChannel[A]) =
   deallocShared(actorChannel)
 
-proc allocActor*[A](): Actor[A] =
+proc allocActor*[A](): ActorRef[A] =
+  result = cast[ActorRef[A]](allocShared0(sizeof(Actor[A])))
   result.main = allocActorChannel[A]()
   result.sys  = allocActorChannel[SystemMessage]()
 
@@ -85,10 +88,8 @@ proc destroyActor*[A](actor: Actor[A]) =
   #deallocShared(actor.sys)
 
 proc createActor*[A](init: ActorInit[A]): ActorRef[A] =
-  var actor = allocActor[A]()
-  let actorRef = ActorRef[A](actor: actor)
-  init(actorRef)
-  actorRef
+  result = allocActor[A]()
+  init(result)
 
 proc createActor*[A](receive: ActorBehavior[A]): ActorRef[A] =    
   proc init(self: ActorRef[A]) =
@@ -104,19 +105,21 @@ proc createActor*[A](receive: ActorContextBehavior[A]): ActorRef[A] =
   createActor[A](init = init)
 
 proc toTask*[A](actorRef: ActorRef[A]): Task =
-  return proc(): TaskStatus =
-    let actor = actorRef.actor
-    let (hasSysMsg, sysMsg) = actor.sys.tryRecv()
+  proc actorTask(pp: pointer): TaskStatus =
+    assert pp != nil
+    let actorRef = cast[ActorRef[A]](pp)
+    let (hasSysMsg, sysMsg) = actorRef.sys.tryRecv()
     if hasSysMsg:
       case sysMsg
       of sysKill:
-        destroyActor(actorRef.actor)
+        #destroyActor(actorRef)
         taskFinished
     else:
-      let (hasMsg, msg) = actor.main.tryRecv()
+      let (hasMsg, msg) = actorRef.main.tryRecv()
       if hasMsg:
-        actor.main.behavior(msg)
+        actorRef.main.behavior(msg)
       taskContinue
+  return Task(p:actorTask, pp: actorRef)
 
 proc createActorSystem*(executor: Executor): ActorSystem =
   result.executor = executor

@@ -6,7 +6,8 @@ proc createSimpleExecutor*(workers: int): Executor =
       var r: Option[ScheduledTask] = self.channel.dequeue()
       if r.isSome:
         var t = r.get
-        t.status = t.task()
+        let p = t.task.p
+        t.status = p(t.task.pp)
         # return back to the parent for rescheduling
         let command = 
           ExecutorCommand(

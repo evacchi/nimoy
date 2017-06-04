@@ -32,7 +32,7 @@ proc MessageNum(num: int): Message  =
 proc nanoTime(): float = 
   epochTime()
 
-const SIZE  = 1_000_000
+const SIZE  = 1000000
 const WIDTH = 10
 
 let executor = createSimpleExecutor(2)
@@ -47,6 +47,7 @@ proc Skynet(parent: ActorRef[Message]): ActorInit[Message] =
       case m.kind
       of msgStart:
         if m.size == 1:
+          #echo m.num ," to "#, parent
           parent ! MessageNum(m.num)
           self.send(sysKill)
         else:
@@ -59,8 +60,9 @@ proc Skynet(parent: ActorRef[Message]): ActorInit[Message] =
       of msgNum:
         todo -= 1
         count += m.myNum
+        #echo "=", count, ", ", todo
         if todo == 0:
-          #echo count        
+          #echo "::", count        
           parent ! MessageNum(count)
           self.send(sysKill)
         
